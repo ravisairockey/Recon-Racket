@@ -20,7 +20,6 @@ Crafted and maintained by **@AmilRSV**.
 
 ---
 
-
 ## 🔍 Workflow diagram
 
 ```mermaid
@@ -38,95 +37,95 @@ graph TD
     I -->|2| K[View HTML report]
     I -->|3| L[Run again]
     I -->|0| M[Exit]
- ```
-✨ Features
+```
 
-    Reconnaissance with subfinder, amass
+---
 
-    Fast port & service scanning with nmap
+## ✨ Features
 
-    Vulnerability scanning (nikto, wpscan)
+- Reconnaissance with **subfinder**, **amass**
+- Fast port & service scanning with **nmap**
+- Vulnerability scanning (**nikto**, **wpscan**)
+- Clean HTML report export
+- Timestamped logs in `logs/` folder
+- Interactive terminal menu
+- Easy to extend with more tools
 
-    Clean HTML report export
+---
 
-    Timestamped logs in logs/ folder
+## 🧰 Installation & Setup
 
-    Interactive terminal menu
+⚠️ **Requires:**
+- `nmap`
+- `subfinder`
+- `amass`
+- `nikto`
+- `wpscan`
 
-    Easy to extend with more tools
-
-🧰 Installation & Setup
-
-⚠️ Requires:
-
-    nmap
-
-    subfinder
-
-    amass
-
-    nikto
-
-    wpscan
-
+```bash
 git clone https://github.com/YourUser/Reconamil.sh.git
 cd Reconamil.sh
 chmod +x Reconamil.sh
+```
 
-📦 Usage
+---
 
+## 📦 Usage
+
+```bash
 ./Reconamil.sh -t example.com [-r] [-p ports]
+```
 
-Option	Description
--t target	Specify target domain or IP (required)
--r	Enable recon mode (subfinder, amass)
--p ports	Ports to scan (default: top-ports 1000)
--h	Show help
-🧪 Example
+| Option       | Description                                         |
+|-------------:|----------------------------------------------------:|
+| `-t target`  | Specify target domain or IP (**required**)         |
+| `-r`         | Enable recon mode (subfinder, amass)               |
+| `-p ports`   | Ports to scan (default: `top-ports 1000`)         |
+| `-h`         | Show help                                          |
 
+---
+
+## 🧪 Example
+
+```bash
 ./Reconamil.sh -t example.com -r -p "1-1000"
+```
 
 Expected:
+- Runs subdomain scan (subfinder, amass)
+- nmap scan on ports 1–1000
+- nikto & wpscan vulnerability checks
+- Saves logs:
+  - `logs/scan_TIMESTAMP.txt`
+  - `logs/recon_TIMESTAMP.txt`
+  - `logs/report_TIMESTAMP.html`
 
-    Runs subdomain scan (subfinder, amass)
+---
 
-    nmap scan on ports 1–1000
-
-    nikto & wpscan vulnerability checks
-
-    Saves logs:
-
-        logs/scan_TIMESTAMP.txt
-
-        logs/recon_TIMESTAMP.txt
-
-        logs/report_TIMESTAMP.html
-
-📊 Sample HTML report preview
+## 📊 Sample HTML report preview
 
 Includes:
+- Target info
+- Nmap scan results
+- Recon output (if enabled)
+- Nikto & wpscan findings
 
-    Target info
+*(Screenshot / template coming soon!)*
 
-    Nmap scan results
+---
 
-    Recon output (if enabled)
-
-    Nikto & wpscan findings
-
-(Screenshot / template coming soon!)
-🛠️ Extending
+## 🛠️ Extending
 
 Add your favorite tools easily:
+- `gobuster` for directory brute-force
+- `httpx` or `ffuf` for URL fuzzing
+- Slack / Discord / Telegram notifications
 
-    gobuster for directory brute-force
+---
 
-    httpx or ffuf for URL fuzzing
+## 📂 Project structure
 
-    Slack / Discord / Telegram notifications
-
-📂 Project structure
-
+```plaintext
 Reconamil.sh/
 ├── Reconamil.sh
 ├── logs/
@@ -134,24 +133,38 @@ Reconamil.sh/
 │   ├── recon_TIMESTAMP.txt
 │   └── report_TIMESTAMP.html
 └── README.md
+```
 
-⚡ Contributing
+---
+
+## ⚡ Contributing
 
 Pull requests welcome!
 
-Tips:
+**Tips:**
+- Keep functions modular
+- Use color codes for clarity
+- Always log into `logs/` folder
 
-    Keep functions modular
+---
 
-    Use color codes for clarity
-
-    Always log into logs/ folder
-
-📜 License
+## 📜 License
 
 MIT License
-✒️ Author
 
-Made with ❤️ by @AmilRSV
+---
 
-    ⚔️ “Automation is the future of recon.”
+## ✒️ Author
+
+Made with ❤️ by **@AmilRSV**
+
+> ⚔️ “Automation is the future of recon.”
+
+---
+
+✅ Want even more?
+- Add `docs/` folder with real screenshots  
+- Create HTML report template  
+- Add GitHub Actions CI badge  
+
+Just say: **"yes, add those"** 🚀
