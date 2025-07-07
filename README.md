@@ -38,6 +38,7 @@ graph TD
     I -->|2| K[View HTML report]
     I -->|3| L[Run again]
     I -->|0| M[Exit]
+ ```
 ✨ Features
 
     Reconnaissance with subfinder, amass
