@@ -20,6 +20,24 @@ Crafted and maintained by **@AmilRSV**.
 
 ---
 
+
+## 🔍 Workflow diagram
+
+```mermaid
+graph TD
+    A[Start] --> B{Target Provided?}
+    B -- Yes --> C[Show Banner]
+    C --> D{Recon Mode?}
+    D -- Yes --> E[Run subfinder & amass]
+    E --> F[Run nmap scan]
+    D -- No --> F
+    F --> G[Run nikto & wpscan]
+    G --> H[Generate HTML report]
+    H --> I[Show menu]
+    I -->|1| J[View scan log]
+    I -->|2| K[View HTML report]
+    I -->|3| L[Run again]
+    I -->|0| M[Exit]
 ✨ Features
 
     Reconnaissance with subfinder, amass
@@ -136,21 +154,3 @@ MIT License
 Made with ❤️ by @AmilRSV
 
     ⚔️ “Automation is the future of recon.”
-
-## 🔍 Workflow diagram
-
-```mermaid
-graph TD
-    A[Start] --> B{Target Provided?}
-    B -- Yes --> C[Show Banner]
-    C --> D{Recon Mode?}
-    D -- Yes --> E[Run subfinder & amass]
-    E --> F[Run nmap scan]
-    D -- No --> F
-    F --> G[Run nikto & wpscan]
-    G --> H[Generate HTML report]
-    H --> I[Show menu]
-    I -->|1| J[View scan log]
-    I -->|2| K[View HTML report]
-    I -->|3| L[Run again]
-    I -->|0| M[Exit]
