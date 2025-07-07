@@ -9,11 +9,12 @@
 
 ## 🚀 What is Reconamil.sh?
 **Reconamil.sh** is a modular, automated shell script built for recon and scanning:
-* Subdomain enumeration  
-* Port scanning  
-* Vulnerability scanning  
-* Report generation (HTML & logs)  
-* Interactive menu for repeated scans
+
+✅ Subdomain enumeration  
+✅ Port & service discovery  
+✅ Vulnerability scanning  
+✅ HTML report & log export  
+✅ Interactive CLI menu for repeated scans
 
 Crafted and maintained by **@AmilRSV**.
 
@@ -36,6 +37,7 @@ graph TD
     I -->|2| K[View HTML report]
     I -->|3| L[Run again]
     I -->|0| M[Exit]
+
 
 
 ✨ Features
