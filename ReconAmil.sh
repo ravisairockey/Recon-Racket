@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# incursore.sh - automated recon and scanning framework
+# ReconAmil.sh - automated recon and scanning framework
 # Author: AmilRSV
 
 # Define colors
