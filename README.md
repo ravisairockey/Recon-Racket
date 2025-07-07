@@ -10,10 +10,14 @@
 ## 🚀 What is Reconamil.sh?
 **Reconamil.sh** is a modular, automated shell script built for recon and scanning:
 
-- ✅ Subdomain enumeration  
-- ✅ Port & service discovery  
-- ✅ Vulnerability scanning  
-- ✅ HTML report & log export  
+- ✅ Subdomain enumeration (subfinder, amass)
+- ✅ Port & service discovery (nmap)
+- ✅ Vulnerability scanning (nikto, wpscan, nuclei)
+- ✅ SMB scanning (SMBMap)
+- ✅ Network discovery (netdiscover)
+- ✅ Directory fuzzing (ffuf, gobuster, feroxbuster)
+- ✅ FTP enumeration (nmap --script ftp*)
+- ✅ HTML report & log export
 - ✅ Interactive CLI menu for repeated scans
 
 Crafted and maintained by **@AmilRSV**.
@@ -30,41 +34,52 @@ graph TD
     D -- Yes --> E[Run subfinder & amass]
     E --> F[Run nmap scan]
     D -- No --> F
-    F --> G[Run nikto & wpscan]
-    G --> H[Generate HTML report]
-    H --> I[Show menu]
-    I -->|1| J[View scan log]
-    I -->|2| K[View HTML report]
-    I -->|3| L[Run again]
-    I -->|0| M[Exit]
+    F --> G[Run nikto, wpscan, nuclei]
+    G --> H[Run SMBMap & netdiscover]
+    H --> I[Run ffuf, gobuster, feroxbuster, FTP enum]
+    I --> J[Generate HTML report]
+    J --> K[Show menu]
+    K -->|1| L[View scan log]
+    K -->|2| M[View HTML report]
+    K -->|3| N[Run again]
+    K -->|0| O[Exit]
 ```
 
 ---
 
 ## ✨ Features
 
-- Reconnaissance with **subfinder**, **amass**
-- Fast port & service scanning with **nmap**
-- Vulnerability scanning (**nikto**, **wpscan**)
+- Subdomain & recon tools: subfinder, amass
+- Fast port & service scan: nmap
+- Vulnerability scanning: nikto, wpscan, nuclei
+- SMB enumeration: SMBMap
+- Network discovery: netdiscover
+- Directory brute-forcing: ffuf, gobuster, feroxbuster
+- FTP enumeration: nmap --script ftp*
 - Clean HTML report export
 - Timestamped logs in `logs/` folder
-- Interactive terminal menu
-- Easy to extend with more tools
+- Interactive CLI menu
+- Checks & prompts to install missing tools automatically
 
 ---
 
 ## 🧰 Installation & Setup
 
 ⚠️ **Requires:**
+
 - `nmap`
 - `subfinder`
 - `amass`
 - `nikto`
 - `wpscan`
+- `nuclei`
+- `SMBMap`
+- `netdiscover`
+- `ffuf`, `gobuster`, `feroxbuster`
 
 ```bash
-git clone https://github.com/ravisairockey/Recon-Racket/blob/main/Reconamil.sh
-cd Reconamil.sh
+git clone https://github.com/ravisairockey/Recon-Racket
+cd Recon-Racket
 chmod +x Reconamil.sh
 ```
 
@@ -76,12 +91,12 @@ chmod +x Reconamil.sh
 ./Reconamil.sh -t example.com [-r] [-p ports]
 ```
 
-| Option       | Description                                         |
-|-------------:|----------------------------------------------------:|
-| `-t target`  | Specify target domain or IP (**required**)         |
-| `-r`         | Enable recon mode (subfinder, amass)               |
-| `-p ports`   | Ports to scan (default: `top-ports 1000`)         |
-| `-h`         | Show help                                          |
+| Option       | Description                                        |
+|-------------:|---------------------------------------------------:|
+| `-t target`  | Specify target domain or IP (**required**)        |
+| `-r`         | Enable recon mode (subfinder, amass)              |
+| `-p ports`   | Ports to scan (default: `top-ports 1000`)        |
+| `-h`         | Show help                                         |
 
 ---
 
@@ -92,9 +107,11 @@ chmod +x Reconamil.sh
 ```
 
 Expected:
-- Runs subdomain scan (subfinder, amass)
+- Runs subfinder & amass
 - nmap scan on ports 1–1000
-- nikto & wpscan vulnerability checks
+- nikto, wpscan, nuclei vulnerability checks
+- SMB scan & network discovery
+- Directory fuzzing & FTP enum
 - Saves logs:
   - `logs/scan_TIMESTAMP.txt`
   - `logs/recon_TIMESTAMP.txt`
@@ -102,13 +119,14 @@ Expected:
 
 ---
 
-## 📊 Sample HTML report preview
+## 📊 HTML report preview
 
 Includes:
 - Target info
-- Nmap scan results
-- Recon output (if enabled)
-- Nikto & wpscan findings
+- Scan results & recon output
+- Vulnerability findings
+- SMB & FTP checks
+- Directory fuzz results
 
 *(Screenshot / template coming soon!)*
 
@@ -116,10 +134,10 @@ Includes:
 
 ## 🛠️ Extending
 
-Add your favorite tools easily:
-- `gobuster` for directory brute-force
-- `httpx` or `ffuf` for URL fuzzing
-- Slack / Discord / Telegram notifications
+Add even more tools easily:
+- `httpx` for HTTP probing
+- `Slack / Discord` notifications
+- Automatic upload to dashboards
 
 ---
 
@@ -144,7 +162,7 @@ Pull requests welcome!
 **Tips:**
 - Keep functions modular
 - Use color codes for clarity
-- Always log into `logs/` folder
+- Always log into `logs/`
 
 ---
 
@@ -162,9 +180,9 @@ Made with ❤️ by **@AmilRSV**
 
 ---
 
-✅ Want even more?
-- Add `docs/` folder with real screenshots  
-- Create HTML report template  
-- Add GitHub Actions CI badge  
+✅ Want more?
+- Add `docs/` folder with real screenshots
+- HTML report template
+- GitHub Actions CI badge
 
 Just say: **"yes, add those"** 🚀
