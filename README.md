@@ -80,7 +80,7 @@ graph TD
 ```bash
 git clone https://github.com/ravisairockey/Recon-Racket
 cd Recon-Racket
-chmod +x Reconamil.sh
+chmod +x ReconAmil.sh
 ```
 
 ---
