@@ -63,7 +63,7 @@ graph TD
 - `wpscan`
 
 ```bash
-git clone https://github.com/YourUser/Reconamil.sh.git
+git clone https://github.com/ravisairockey/Recon-Racket/blob/main/Reconamil.sh
 cd Reconamil.sh
 chmod +x Reconamil.sh
 ```
