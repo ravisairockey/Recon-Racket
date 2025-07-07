@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Reconamil.sh - Automated recon and scanning framework
+# ReconAmil.sh - Automated recon and scanning framework
 # Author: AmilRSV
 
 # Define colors
@@ -16,16 +16,22 @@ mkdir -p "$LOG_DIR"
 
 banner() {
     printf "${PURPLE}
-8 888888888o.   8 8888888888       ,o888888o.        ,o888888o.     b.             8                     8 888888888o.      d888888o.   \`8.\`888b           ,8'
-8 8888    \`88.  8 8888            8888     \`88.   . 8888     \`88.   888o.          8                     8 8888    \`88.   .\`8888:' \`88.  \`8.\`888b         ,8'
-8 8888     \`88  8 8888         ,8 8888       \`8. ,8 8888       \`8b  Y88888o.       8                     8 8888     \`88   8.\`8888.   Y8   \`8.\`888b       ,8'
-8 8888     ,88  8 8888         88 8888           88 8888        \`8b .\`Y888888o.    8                     8 8888     ,88   \`8.\`8888.        \`8.\`888b     ,8'
-8 8888.   ,88'  8 888888888888 88 8888           88 8888         88 8o. \`Y888888o. 8                     8 8888.   ,88'    \`8.\`8888.        \`8.\`888b   ,8'
-8 888888888P'   8 8888         88 8888           88 8888         88 8\`Y8o. \`Y88888o8                     8 888888888P'      \`8.\`8888.        \`8.\`888b ,8'
-8 8888\`8b       8 8888         88 8888           88 8888        ,8P 8   \`Y8o. \`Y8888                     8 8888\`8b           \`8.\`8888.        \`8.\`888b8'
-8 8888 \`8b.     8 8888         \`8 8888       .8' \`8 8888       ,8P  8      \`Y8o. \`Y8                     8 8888 \`8b.     8b   \`8.\`8888.        \`8.\`888'
-8 8888   \`8b.   8 8888            8888     ,88'   \` 8888     ,88'   8         \`Y8o.\`                     8 8888   \`8b.   \`8b.  ;8.\`8888         \`8.\`8'
-8 8888     \`88. 8 888888888888     \`8888888P'        \`8888888P'     8            \`Yo                     8 8888     \`88.  \`Y8888P ,88P'          \`8.\`
+RRRRRRRRRRRRRRRRR      SSSSSSSSSSSSSSS VVVVVVVV           VVVVVVVV
+R::::::::::::::::R   SS:::::::::::::::SV::::::V           V::::::V
+R::::::RRRRRR:::::R S:::::SSSSSS::::::SV::::::V           V::::::V
+RR:::::R     R:::::RS:::::S     SSSSSSSV::::::V           V::::::V
+  R::::R     R:::::RS:::::S             V:::::V           V:::::V 
+  R::::R     R:::::RS:::::S              V:::::V         V:::::V  
+  R::::RRRRRR:::::R  S::::SSSS            V:::::V       V:::::V   
+  R:::::::::::::RR    SS::::::SSSSS        V:::::V     V:::::V    
+  R::::RRRRRR:::::R     SSS::::::::SS       V:::::V   V:::::V     
+  R::::R     R:::::R       SSSSSS::::S       V:::::V V:::::V      
+  R::::R     R:::::R            S:::::S       V:::::V:::::V       
+  R::::R     R:::::R            S:::::S        V:::::::::V        
+RR:::::R     R:::::RSSSSSSS     S:::::S         V:::::::V         
+R::::::R     R:::::RS::::::SSSSSS:::::S          V:::::V          
+R::::::R     R:::::RS:::::::::::::::SS            V:::V           
+RRRRRRRR     RRRRRRR SSSSSSSSSSSSSSS               VVV            
                           crafted by @AmilRSV
 ${NC}\n"
 }
@@ -36,6 +42,7 @@ usage() {
     echo -e "  -r               Enable recon mode"
     echo -e "  -p <ports>       Specify ports to scan (default: top 1000 ports)"
     echo -e "  -h               Show help"
+    printf "Extra tools: netdiscover, SMBMap (run after main scans)\n"
     printf "Script by ${PURPLE}@AmilRSV${NC} \n"
 }
 
@@ -70,14 +77,14 @@ HTML_REPORT="$LOG_DIR/report_$TIMESTAMP.html"
 echo -e "${YELLOW}Target: $TARGET${NC}"
 
 if [ "$RECON" = true ]; then
-    echo -e "${GREEN}Starting recon...${NC}"
+    echo -e "${GREEN}Starting recon mode...${NC}"
     {
         echo "### subfinder"
         subfinder -d "$TARGET"
         echo -e "\n### amass"
         amass enum -d "$TARGET"
     } | tee "$RECON_FILE"
-    echo -e "${GREEN}Recon saved to $RECON_FILE${NC}"
+    echo -e "${GREEN}Recon log saved to $RECON_FILE${NC}"
 fi
 
 echo -e "${GREEN}Running nmap scan...${NC}"
@@ -86,10 +93,17 @@ nmap -sC -sV -T4 --$PORTS "$TARGET" | tee "$SCAN_FILE"
 echo -e "${GREEN}Running nikto...${NC}"
 nikto -h "$TARGET" >> "$SCAN_FILE"
 
-echo -e "${GREEN}Running wpscan (if target is WP)...${NC}"
+echo -e "${GREEN}Running wpscan (if target is WordPress)...${NC}"
 wpscan --url "http://$TARGET" --enumerate p >> "$SCAN_FILE"
 
-echo -e "${GREEN}Scan finished. Logs in: $SCAN_FILE${NC}"
+# NEW: keep old scans, then add new tools
+echo -e "${GREEN}Running network discovery with netdiscover...${NC}"
+netdiscover -r 192.168.1.0/24 >> "$SCAN_FILE"
+
+echo -e "${GREEN}Running SMBMap for Samba share enumeration...${NC}"
+smbmap -H "$TARGET" >> "$SCAN_FILE"
+
+echo -e "${GREEN}All scans finished. Logs saved to: $SCAN_FILE${NC}"
 
 # Simple HTML report
 {
@@ -109,7 +123,7 @@ echo "</body></html>"
 
 echo -e "${GREEN}HTML report created: ${BLUE}$HTML_REPORT${NC}"
 
-# Menu
+# Interactive Menu
 while true; do
     echo -e "\n${YELLOW}--- Menu ---${NC}"
     echo "1. View latest scan log"
