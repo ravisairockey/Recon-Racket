@@ -151,18 +151,10 @@ Made with ❤️ by @AmilRSV
 
 ---
 
-### ✅ **Extras you can add later**:
-- ✅ Upload example report to `docs/` folder  
-- 📸 Add screenshot image instead of placeholder  
-- 🌐 Add your contact / portfolio / LinkedIn  
-- 📦 Add `requirements.txt` or install script
-
-If you'd like,  
-**I can also:**
-✅ generate the HTML report template  
-✅ add badges & GitHub Actions workflow  
-✅ generate license file  
+✅ This will now **render perfectly on GitHub** with the mermaid diagram  
+If you'd like, I can also:
+- add a `docs/` folder with real screenshots  
+- create an HTML report template  
+- add a GitHub Actions badge and CI workflow  
 
 Just tell me! 🚀
-
-
