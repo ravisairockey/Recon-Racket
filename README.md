@@ -19,7 +19,7 @@ Crafted and maintained by **@AmilRSV**.
 
 ---
 
-## 🔍 **Workflow diagram**
+## 🔍 Workflow diagram
 
 ```mermaid
 graph TD
