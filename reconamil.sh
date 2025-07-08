@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # RSV-Recon: The Ultimate Recon Script
 # Author: RSVamil
 # Based on enumify by @wirzka & @warrantea_v01d
