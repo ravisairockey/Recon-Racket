@@ -1,24 +1,16 @@
-#!/bin/bash
-# RSV-Recon: Comprehensive Network Assessment Tool
-# Author: AmilRSV
-# Inspired by enumify by @wirzka & @warrantea_v01d
+#!/bin/sh
+# RSV-Recon: The Ultimate Recon Script
+# Author: RSVamil
+# Based on enumify by @wirzka & @warrantea_v01d
 
 # --- ANSI Colors ---
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-# --- Global Variables ---
-TARGET=""
-OUTPUT_DIR=""
-LOG_DIR=""
-HTML_REPORT=""
-OPEN_PORTS=""
-UDP_PORTS=""
+RED='\033[1;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[1;32m'
+CYAN='\033[1;36m'
+PURPLE='\033[1;35m'
+NC='\033[0m'
+origIFS="${IFS}"
 
 # --- Banner ---
 banner() {
@@ -40,146 +32,341 @@ R::::::R     R:::::RS::::::SSSSSS:::::S          V:::::V
 R::::::R     R:::::RS:::::::::::::::SS            V:::V           
 RRRRRRRR     RRRRRRR SSSSSSSSSSSSSSS               VVV            
 ${NC}
-${CYAN}crafted by @AmilRSV${NC}\n\n"
+${CYAN}crafted by @RSVamil${NC}\n\n"
 }
 
-# --- Helper Functions ---
+# Start timer
+elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
+
+# Parse flags
+while [ $# -gt 0 ]; do
+        key="$1"
+
+        case "${key}" in
+        -H | --host)
+                HOST="$2"
+                shift
+                shift
+                ;;
+        -t | --type)
+                TYPE="$2"
+                shift
+                shift
+                ;;
+        -d | --dns)
+                DNS="$2"
+                shift
+                shift
+                ;;
+        -o | --output)
+                OUTPUTDIR="$2"
+                shift
+                shift
+                ;;
+        *)
+                POSITIONAL="${POSITIONAL} $1"
+                shift
+                ;;
+        esac
+done
+set -- ${POSITIONAL}
+
+# Legacy flags support, if run without -H/-t
+if [ -z "${HOST}" ]; then
+        HOST="$1"
+fi
+
+if [ -z "${TYPE}" ]; then
+        TYPE="$2"
+fi
+
+# Set DNS or default to system DNS
+if [ -n "${DNS}" ]; then
+        DNSSERVER="${DNS}"
+        DNSSTRING="--dns-server=${DNSSERVER}"
+else
+        DNSSERVER="$(grep 'nameserver' /etc/resolv.conf | grep -v '#' | head -n 1 | awk {'print $NF'})"
+        DNSSTRING="--system-dns"
+fi
+
+# Set output dir or default to host-based dir
+if [ -z "${OUTPUTDIR}" ]; then
+        OUTPUTDIR="${HOST}"
+fi
+
+# Set path to nmap binary or default to nmap in $PATH
+if [ -z "${NMAPPATH}" ] && type nmap >/dev/null 2>&1; then
+        NMAPPATH="$(type nmap | awk {'print $NF'})"
+else
+        printf "${RED}\nNmap is not installed and -s is not used. Eject! Eject! Eject!${NC}\n\n" && REMOTE=true
+fi
+
+# Print usage menu and exit. Used when issues are encountered
 usage() {
-    echo -e "${GREEN}Usage: $0 -H <TARGET-IP>${NC}"
-    echo -e "${YELLOW}Example: $0 -H 192.168.1.1${NC}"
-    exit 1
-}
-
-init_dirs() {
-    OUTPUT_DIR="recon-${TARGET}-$(date +%Y%m%d_%H%M%S)"
-    LOG_DIR="$OUTPUT_DIR/logs"
-    HTML_REPORT="$OUTPUT_DIR/report.html"
-    mkdir -p "$OUTPUT_DIR" "$LOG_DIR" "$OUTPUT_DIR/nmap" "$OUTPUT_DIR/recon"
-    echo -e "${GREEN}[+] Output will be saved to: $OUTPUT_DIR${NC}"
-}
-
-check_dependencies() {
-    local missing=()
-    local tools=("nmap" "arp-scan" "nikto" "nuclei" "ffuf" "hydra" "smbmap" "smbclient" "enum4linux")
-    echo -e "${BLUE}[*] Checking for necessary tools...${NC}"
-    for tool in "${tools[@]}"; do
-        if ! command -v "$tool" &> /dev/null; then
-            missing+=("$tool")
-        fi
-    done
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        echo -e "${RED}[!] Missing tools: ${missing[*]}${NC}"
-        read -p "Attempt to install missing tools? (y/n): " install_choice
-        if [[ "$install_choice" == "y" ]]; then
-            sudo apt update && sudo apt install -y "${missing[@]}"
-        fi
-    fi
-}
-
-# --- Scanning Functions ---
-
-network_discovery() {
-    echo -e "${GREEN}[+] Discovering hosts with arp-scan...${NC}"
-    sudo arp-scan -l | tee "$LOG_DIR/arp_scan.log"
-    mapfile -t DISCOVERED_IPS < <(grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' "$LOG_DIR/arp_scan.log" | sort -u)
-    
-    if [ ${#DISCOVERED_IPS[@]} -eq 0 ]; then
-        echo -e "${RED}[!] No hosts found. Exiting.${NC}"
+        echo
+        printf "${GREEN}Usage:${NC} ${RED}$(basename $0) -H/--host ${NC}<TARGET-IP>${RED} -t/--type ${NC}<TYPE>${RED}\n"
+        printf "${YELLOW}Optional: [-d/--dns ${NC}<DNS SERVER>${YELLOW}] [-o/--output ${NC}<OUTPUT DIRECTORY>${YELLOW}]${NC}\n\n"
+        printf "${CYAN}Scan Types:\n"
+        printf "${CYAN}\tPort    : ${NC}Shows all open ports ${YELLOW}\n"
+        printf "${CYAN}\tScript  : ${NC}Runs a script scan on found ports ${YELLOW}\n"
+        printf "${CYAN}\tUDP     : ${NC}Runs a UDP scan \"requires sudo\" ${YELLOW}\n"
+        printf "${CYAN}\tVulns   : ${NC}Runs CVE scan and nmap Vulns scan on all found ports ${YELLOW}\n"
+        printf "${CYAN}\tRecon   : ${NC}Suggests recon commands, then prompts to automatically run them\n"
+        printf "${CYAN}\tAll     : ${NC}Runs all the scans ${YELLOW}\n"
+        printf "${NC}\n"
+        printf "Crafted by ${PURPLE}@RSVamil${NC} \n"
         exit 1
-    fi
-
-    echo -e "\n${YELLOW}[+] Discovered Targets:${NC}"
-    for i in "${!DISCOVERED_IPS[@]}"; do echo "$((i+1)). ${DISCOVERED_IPS[$i]}"; done
-    
-    read -p "Select target (number) or enter custom IP: " target_choice
-    if [[ "$target_choice" =~ ^[0-9]+$ ]] && [ "$target_choice" -le "${#DISCOVERED_IPS[@]}" ]; then
-        TARGET="${DISCOVERED_IPS[$((target_choice-1))]}"
-    else
-        TARGET="$target_choice"
-    fi
 }
 
-port_scan() {
-    echo -e "\n${GREEN}--- Starting Full TCP Port Scan ---${NC}"
-    sudo nmap -p- -T4 --min-rate 1000 -oN "$OUTPUT_DIR/nmap/full_tcp_scan.nmap" "$TARGET"
-    OPEN_PORTS=$(grep -oP '^\d+\/open' "$OUTPUT_DIR/nmap/full_tcp_scan.nmap" | cut -d'/' -f1 | tr '\n' ',' | sed 's/,$//')
-    echo -e "${YELLOW}Scan Complete. Open TCP Ports:${NC}"
-    grep --color=always -E '^[0-9]+' "$OUTPUT_DIR/nmap/full_tcp_scan.nmap"
+# Print initial header and set initial variables before scans start
+header() {
+        banner
+        echo
+        if expr "${TYPE}" : '^\([Aa]ll\)$' >/dev/null; then
+                printf "${GREEN}Hail Mary on ${NC}${PURPLE}${HOST}${NC}"
+        else
+                printf "${GREEN}Launching a ${TYPE} scan on ${NC}${HOST}"
+        fi
+
+        if expr "${HOST}" : '^\(\([[:alnum:]-]\{1,63\}\.\)*[[:alpha:]]\{2,6\}\)$' >/dev/null; then
+                urlIP="$(host -4 -W 1 ${HOST} ${DNSSERVER} 2>/dev/null | grep ${HOST} | head -n 1 | awk {'print $NF'})"
+                if [ -n "${urlIP}" ]; then
+                        printf "${YELLOW} with IP ${NC}${urlIP}\n\n"
+                else
+                        printf ".. ${RED}Could not resolve IP of ${NC}${HOST}\n\n"
+                fi
+        else
+                printf "\n"
+        fi
+
+        if expr "${HOST}" : '^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)$' >/dev/null; then
+                subnet="$(echo "${HOST}" | cut -d "." -f 1,2,3).0"
+        fi
+
+        kernel="$(uname -s)"
+        checkPing="$(checkPing "${urlIP:-$HOST}")"
+        nmapType="$(echo "${checkPing}" | head -n 1)"
+
+        ttl="$(echo "${checkPing}" | tail -n 1)"
+        if [ "${ttl}" != "nmap -Pn" ]; then
+                osType="$(checkOS "${ttl}")"
+                printf "${NC}\n"
+                printf "${GREEN}Host is likely running ${NC}${PURPLE}${osType}${NC}\n"
+        fi
+        echo
 }
 
-script_scan() {
-    if [ -z "$OPEN_PORTS" ]; then return; fi
-    echo -e "\n${GREEN}--- Starting Script & Version Scan on Open Ports ---${NC}"
-    sudo nmap -sCV -p"$OPEN_PORTS" -oN "$OUTPUT_DIR/nmap/script_scan.nmap" "$TARGET"
-    echo -e "${YELLOW}Scan Complete. Service Versions:${NC}"
-    grep --color=always -E '^[0-9]+' "$OUTPUT_DIR/nmap/script_scan.nmap"
+assignPorts() {
+        if [ -f "nmap/full_TCP_$1.nmap" ]; then
+                allTCPPorts="$(awk -vORS=, -F/ '/^[0-9]/{print $1}' "nmap/full_TCP_$1.nmap" | sed 's/.$//')"
+        fi
+
+        if [ -f "nmap/UDP_$1.nmap" ]; then
+                udpPorts="$(awk -vORS=, -F/ '/^[0-9]/{print $1}' "nmap/UDP_$1.nmap" | sed 's/.$//')"
+                if [ "${udpPorts}" = "Al" ]; then
+                        udpPorts=""
+                fi
+        fi
 }
 
-udp_scan() {
-    echo -e "\n${GREEN}--- Starting Top 100 UDP Scan ---${NC}"
-    sudo nmap -sU --top-ports 100 -oN "$OUTPUT_DIR/nmap/udp_scan.nmap" "$TARGET"
-    UDP_PORTS=$(grep -oP '^\d+\/open' "$OUTPUT_DIR/nmap/udp_scan.nmap" | cut -d'/' -f1 | tr '\n' ',' | sed 's/,$//')
-    echo -e "${YELLOW}Scan Complete. Open UDP Ports:${NC}"
-    grep --color=always -E '^[0-9]+' "$OUTPUT_DIR/nmap/udp_scan.nmap"
+checkPing() {
+        if [ $kernel = "Linux" ]; then TW="W"; else TW="t"; fi
+        pingTest="$(ping -c 1 -${TW} 1 "$1" 2>/dev/null | grep ttl)"
+        if [ -z "${pingTest}" ]; then
+                echo "${NMAPPATH} -Pn"
+        else
+                echo "${NMAPPATH}"
+                if expr "$1" : '^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]{1,3\}\.[0-9]\{1,3\}\)$' >/dev/null; then
+                        ttl="$(echo "${pingTest}" | cut -d " " -f 6 | cut -d "=" -f 2)"
+                else
+                        ttl="$(echo "${pingTest}" | cut -d " " -f 7 | cut -d "=" -f 2)"
+                fi
+                echo "${ttl}"
+        fi
 }
 
-vuln_scan() {
-    if [ -z "$OPEN_PORTS" ]; then return; fi
-    echo -e "\n${GREEN}--- Starting Vulnerability Scans ---${NC}"
-    
-    # Nmap Vuln Scan
-    echo -e "${BLUE}[*] Running Nmap NSE vulnerability scripts...${NC}"
-    sudo nmap -sV --script="vuln" -p"$OPEN_PORTS" -oN "$OUTPUT_DIR/nmap/vuln_scan.nmap" "$TARGET"
-    echo -e "${YELLOW}Nmap Vuln Scan Results:${NC}"
-    cat "$OUTPUT_DIR/nmap/vuln_scan.nmap"
-
-    # Web Scans
-    if [[ ",$OPEN_PORTS," == *",80,"* || ",$OPEN_PORTS," == *",443,"* ]]; then
-        echo -e "\n${BLUE}[*] Running Nikto...${NC}"
-        nikto -h "$TARGET" -output "$OUTPUT_DIR/recon/nikto.txt"
-        echo -e "${YELLOW}Nikto Results:${NC}"
-        cat "$OUTPUT_DIR/recon/nikto.txt"
-
-        echo -e "\n${BLUE}[*] Running Nuclei...${NC}"
-        nuclei -u "http://$TARGET" -t vulnerabilities -o "$OUTPUT_DIR/recon/nuclei.txt"
-        echo -e "${YELLOW}Nuclei Results:${NC}"
-        cat "$OUTPUT_DIR/recon/nuclei.txt"
-    fi
+checkOS() {
+        case "$1" in
+        25[456]) echo "OpenBSD/Cisco/Oracle" ;;
+        12[78]) echo "Windows" ;;
+        6[34]) echo "Linux" ;;
+        *) echo "Some alien stuff!" ;;
+        esac
 }
 
-recon_recommend_and_run() {
-    if [ -z "$OPEN_PORTS" ]; then return; fi
-    echo -e "\n${GREEN}--- Starting Recommended Recon Actions ---${NC}"
-
-    # Web Recon
-    if [[ ",$OPEN_PORTS," == *",80,"* || ",$OPEN_PORTS," == *",443,"* ]]; then
-        echo -e "\n${BLUE}[*] Running FFUF for web directory bruteforcing...${NC}"
-        ffuf -u "http://$TARGET/FUZZ" -w /usr/share/wordlists/dirb/common.txt -o "$OUTPUT_DIR/recon/ffuf.json"
-        echo -e "${YELLOW}FFUF Results:${NC}"
-        cat "$OUTPUT_DIR/recon/ffuf.json"
-    fi
-
-    # FTP Recon
-    if [[ ",$OPEN_PORTS," == *",21,"* ]]; then
-        echo -e "\n${BLUE}[*] Running Hydra for FTP bruteforce...${NC}"
-        hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/seclists/Passwords/2020-200_most_common_passwords.txt "$TARGET" ftp -o "$OUTPUT_DIR/recon/hydra_ftp.txt"
-        echo -e "${YELLOW}Hydra FTP Results:${NC}"
-        cat "$OUTPUT_DIR/recon/hydra_ftp.txt"
-    fi
-
-    # SMB Recon
-    if [[ ",$OPEN_PORTS," == *",445,"* || ",$OPEN_PORTS," == *",139,"* ]]; then
-        echo -e "\n${BLUE}[*] Running SMB enumeration...${NC}"
-        smbmap -H "$TARGET" | tee "$OUTPUT_DIR/recon/smbmap.txt"
-        smbclient -L "//$TARGET/" -N | tee "$OUTPUT_DIR/recon/smbclient.txt"
-        enum4linux -a "$TARGET" | tee "$OUTPUT_DIR/recon/enum4linux.txt"
-        echo -e "${YELLOW}SMB Enumeration Complete. Check logs in output directory.${NC}"
-    fi
+portScan() {
+        echo
+        printf "${GREEN}---------------------Starting Port Scan-----------------------\n"
+        printf "${NC}\n"
+        
+        if command -v rustscan &> /dev/null; then
+            printf "${YELLOW}[*] RustScan Launched${NC}\n"
+            rustscan --ulimit 5000 -a ${HOST} -- -sV -oN nmap/Port_${HOST}.nmap
+        else
+            printf "${YELLOW}[!] Rustscan not found, using nmap.${NC}\n"
+            ${nmapType} -T4 --max-retries 1 --max-scan-delay 20 --open -oN nmap/Port_${HOST}.nmap ${HOST} ${DNSSTRING}
+        fi
+        
+        assignPorts "${HOST}"
+        printf "${NC}\n"
+        printf "${YELLOW}[*] Full TCP port scan launched\n${NC}"
+        ${nmapType} -p- -T4 --max-retries 2 -vv --max-scan-delay 30 -Pn --open -oN nmap/full_TCP_${HOST}.nmap ${HOST} ${DNSSTRING}
+        assignPorts "${HOST}"
+        echo
 }
 
-# --- Reporting ---
-generate_report() {
+scriptScan() {
+        printf "${YELLOW}[*] Script Scan launched on open ports\n"
+        printf "${NC}\n"
+        ports="${allTCPPorts}"
+        if [ -z "${ports}" ]; then
+                printf "${YELLOW}No ports in port scan.. Skipping!\n"
+        else
+                ${nmapType} -Pn -sCV -p${ports} --open -oN nmap/Script_TCP_${HOST}.nmap ${HOST} ${DNSSTRING}
+        fi
+        echo
+}
+
+UDPScan() {
+        printf "${YELLOW}[*] UDP port scan launched\n"
+        printf "${NC}\n"
+        if [ "${USER}" != 'root' ]; then
+                echo "${RED}[!] ALERT${NC} UDP scan needs to be run as root."
+                sudo -v
+        fi
+        sudo ${nmapType} -sU --max-retries 1 --open -oN nmap/UDP_${HOST}.nmap ${HOST} ${DNSSTRING}
+        assignPorts "${HOST}"
+        if [ -n "${udpPorts}" ]; then
+                echo
+                printf "${YELLOW}Making a script scan on UDP ports: $(echo "${udpPorts}" | sed 's/,/, /g')\n"
+                printf "${NC}\n"
+                sudo nmap -Pn -sCVU -p${udpPorts} --open -oN nmap/UDP_Extra_${HOST}.nmap ${HOST} ${DNSSTRING}
+        fi
+        echo
+}
+
+vulnsScan() {
+        printf "${YELLOW}[!] Vulnerability Scan\n"
+        printf "${NC}\n"
+        ports="${allTCPPorts}"
+        if [ ! -f /usr/share/nmap/scripts/vulners.nse ]; then
+                printf "${RED}Please install 'vulners.nse' nmap script and rerun.\n"
+        else
+                printf "${YELLOW}> Running CVE scan on ports\n"
+                printf "${NC}\n"
+                nmap -sV -Pn --script vulners --script-args mincvss=7.0 -p${ports} --open -oN nmap/CVEs_${HOST}.nmap ${HOST} ${DNSSTRING}
+                echo
+        fi
+        printf "${YELLOW}> Running Vuln scan on ports\n"
+        printf "${NC}\n"
+        nmap -sV -Pn --script vuln -p${ports} --open -oN nmap/Vulns_${HOST}.nmap ${HOST} ${DNSSTRING}
+        echo
+}
+
+recon() {
+        IFS="
+"
+        reconRecommend "${HOST}" | tee "nmap/Recon_${HOST}.nmap"
+        allRecon="$(grep "${HOST}" "nmap/Recon_${HOST}.nmap" | cut -d " " -f 1 | sort | uniq)"
+
+        for tool in ${allRecon}; do
+                if ! type "${tool}" >/dev/null 2>&1; then
+                        missingTools="$(echo ${missingTools} ${tool} | awk '{$1=$1};1')"
+                fi
+        done
+
+        if [ -n "${missingTools}" ]; then
+                printf "${RED}Missing tools: ${NC}${missingTools}\n"
+                availableRecon="$(echo "${allRecon}" | tr " " "\n" | awk -vORS=', ' '!/'"$(echo "${missingTools}" | tr " " "|")"'/' | sed 's/..$//')"
+        else
+                availableRecon="$(echo "${allRecon}" | tr "\n" " " | sed 's/\ /,\ /g' | sed 's/..$//')"
+        fi
+
+        if [ -n "${availableRecon}" ]; then
+                printf "${YELLOW}\n"
+                printf "Run recon commands?${NC} (All/Skip) [All]: "
+                read reconCommand
+                if [ -z "${reconCommand}" ] || expr "${reconCommand}" : '^\([Aa]ll\)$' >/dev/null; then
+                        runRecon "${HOST}" "All"
+                fi
+        fi
+        IFS="${origIFS}"
+}
+
+reconRecommend() {
+        printf "\n\n\n\n"
+        printf "${YELLOW}[*] Recon Recommendations\n"
+        printf "${NC}\n"
+        IFS="
+"
+        if [ -f "nmap/Script_TCP_${HOST}.nmap" ]; then
+                ports="${allTCPPorts}"
+                file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
+        fi
+        if echo "${file}" | grep -q "ftp"; then
+                ftpPort="$(echo "${file}" | grep ftp | awk -F'/' '{if (NR <= 1) print $1}')"
+                printf "${NC}\n"
+                printf "${YELLOW}> FTP bruteforcing with default creds:\n"
+                printf "${NC}\n"
+                echo "hydra -s $ftpPort -C /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt -u -f \"${HOST}\" ftp | tee \"recon/ftpBruteforce_${HOST}.txt\""
+        fi
+        if echo "${file}" | grep -i -q http; then
+                printf "${NC}\n"
+                printf "${YELLOW}> Web Servers Recon:\n"
+                printf "${NC}\n"
+                for line in ${file}; do
+                        if echo "${line}" | grep -i -q http; then
+                                port="$(echo "${line}" | cut -d "/" -f 1)"
+                                if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
+                                echo "nikto -host \"${urlType}${HOST}:${port}\" | tee \"recon/nikto_${HOST}_${port}.txt\""
+                                echo "ffuf -ic -w /usr/share/wordlists/dirb/common.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                        fi
+                done
+        fi
+        if echo "${file}" | grep -q "445/tcp"; then
+                printf "${NC}\n"
+                printf "${YELLOW}> SMB Recon:\n"
+                printf "${NC}\n"
+                echo "smbmap -H \"${HOST}\" | tee \"recon/smbmap_${HOST}.txt\""
+                echo "smbclient -L \"//${HOST}/\" -U \"guest\"% | tee \"recon/smbclient_${HOST}.txt\""
+                echo "enum4linux -a \"${HOST}\" | tee \"recon/enum4linux_${HOST}.txt\""
+        fi
+        IFS="${origIFS}"
+        echo
+}
+
+runRecon() {
+        echo
+        printf "${GREEN}[*] Running Recon on the target\n"
+        printf "${NC}\n"
+        IFS="
+"
+        mkdir -p recon/
+        if [ "$2" = "All" ]; then
+                reconCommands="$(grep "${HOST}" "nmap/Recon_${HOST}.nmap")"
+        else
+                reconCommands="$(grep "${HOST}" "nmap/Recon_${HOST}.nmap" | grep "$2")"
+        fi
+        for line in ${reconCommands}; do
+                currentScan="$(echo "${line}" | cut -d ' ' -f 1)"
+                fileName="$(echo "${line}" | awk -F "recon/" '{print $2}')"
+                if [ -n "${fileName}" ] && [ ! -f recon/"${fileName}" ]; then
+                        printf "${NC}\n"
+                        printf "${YELLOW}[+] Starting ${currentScan} session\n"
+                        printf "${NC}\n"
+                        eval "${line}"
+                        printf "${NC}\n"
+                        printf "${YELLOW}[-] Finished ${currentScan} session\n"
+                        printf "${NC}\n"
+                        printf "${YELLOW}--------------------------------------\n"
+                fi
+        done
+        IFS="${origIFS}"
+        echo
+}
+
+generate_html_report() {
+    HTML_REPORT="report.html"
     echo -e "\n${GREEN}--- Generating HTML Report ---${NC}"
     
     cat > "$HTML_REPORT" <<EOF
@@ -188,7 +375,7 @@ generate_report() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSV-Recon Report for $TARGET</title>
+    <title>RSV-Recon Report for $HOST</title>
     <style>
         body { font-family: 'Courier New', Courier, monospace; background-color: #1a1a1a; color: #e0e0e0; margin: 20px; }
         h1, h2, h3 { color: #9d72ff; border-bottom: 1px solid #555; padding-bottom: 5px; }
@@ -201,17 +388,24 @@ generate_report() {
 <body>
     <h1>RSV-Recon Report</h1>
     <div class="section">
-        <p><strong>Target:</strong> $TARGET</p>
+        <p><strong>Target:</strong> $HOST</p>
         <p><strong>Scan Date:</strong> $(date)</p>
     </div>
-    <div class="section"><h2>Nmap Script Scan</h2><pre>$(cat "$OUTPUT_DIR/nmap/script_scan.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Nmap Vuln Scan</h2><pre>$(cat "$OUTPUT_DIR/nmap/vuln_scan.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Nikto Scan</h2><pre>$(cat "$OUTPUT_DIR/recon/nikto.txt" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Nuclei Scan</h2><pre>$(cat "$OUTPUT_DIR/recon/nuclei.txt" 2>/dev/null)</pre></div>
-    <div class="section"><h2>FFUF Scan</h2><pre>$(cat "$OUTPUT_DIR/recon/ffuf.json" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Hydra FTP Scan</h2><pre>$(cat "$OUTPUT_DIR/recon/hydra_ftp.txt" 2>/dev/null)</pre></div>
-    <div class="section"><h2>SMBMap Scan</h2><pre>$(cat "$OUTPUT_DIR/recon/smbmap.txt" 2>/dev/null)</pre></div>
-    <footer><p>Report generated by AmilRSV | <a href="https://github.com/ravisairockey" target="_blank">https://github.com/ravisairockey</a></p></footer>
+    <div class="section"><h2>Initial Port Scan</h2><pre>$(cat "nmap/Port_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Full TCP Scan</h2><pre>$(cat "nmap/full_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Script Scan</h2><pre>$(cat "nmap/Script_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>UDP Scan</h2><pre>$(cat "nmap/UDP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>CVEs Scan</h2><pre>$(cat "nmap/CVEs_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Vulns Scan</h2><pre>$(cat "nmap/Vulns_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Recon Results</h2>
+        <h3>Nikto</h3><pre>$(cat recon/nikto* 2>/dev/null)</pre>
+        <h3>FFUF</h3><pre>$(cat recon/ffuf* 2>/dev/null)</pre>
+        <h3>Hydra</h3><pre>$(cat recon/ftpBruteforce* 2>/dev/null)</pre>
+        <h3>SMBMap</h3><pre>$(cat recon/smbmap* 2>/dev/null)</pre>
+        <h3>SMBClient</h3><pre>$(cat recon/smbclient* 2>/dev/null)</pre>
+        <h3>Enum4Linux</h3><pre>$(cat recon/enum4linux* 2>/dev/null)</pre>
+    </div>
+    <footer><p>Report generated by RSVamil | <a href="https://github.com/ravisairockey" target="_blank">https://github.com/ravisairockey</a></p></footer>
 </body>
 </html>
 EOF
@@ -220,37 +414,72 @@ EOF
     xdg-open "$HTML_REPORT" 2>/dev/null
 }
 
-# --- Main Execution ---
-main() {
-    banner
-    check_dependencies
-
-    # Argument parsing
-    if [ $# -eq 0 ]; then
-        network_discovery
-    else
-        while [ $# -gt 0 ]; do
-            case "$1" in
-                -H|--host) TARGET="$2"; shift; shift;;
-                *) usage;;
-            esac
-        done
-    fi
-
-    if [ -z "$TARGET" ]; then
-        echo -e "${RED}[!] No target selected. Exiting.${NC}"
-        exit 1
-    fi
-
-    init_dirs
-    port_scan
-    script_scan
-    udp_scan
-    vuln_scan
-    recon_recommend_and_run
-    generate_report
-    
-    echo -e "\n${PURPLE}=== All Scans Complete ===${NC}"
+footer() {
+        printf "${GREEN}[!] Finished all scans\n"
+        printf "${NC}\n\n"
+        elapsedEnd="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
+        elapsedSeconds=$((elapsedEnd - elapsedStart))
+        if [ ${elapsedSeconds} -gt 3600 ]; then
+                hours=$((elapsedSeconds / 3600))
+                minutes=$(((elapsedSeconds % 3600) / 60))
+                seconds=$(((elapsedSeconds % 3600) % 60))
+                printf "${YELLOW}Completed in ${hours} hour(s), ${minutes} minute(s) and ${seconds} second(s)\n"
+        elif [ ${elapsedSeconds} -gt 60 ]; then
+                minutes=$(((elapsedSeconds % 3600) / 60))
+                seconds=$(((elapsedSeconds % 3600) % 60))
+                printf "${YELLOW}Completed in ${minutes} minute(s) and ${seconds} second(s)\n"
+        else
+                printf "${YELLOW}Completed in ${elapsedSeconds} seconds\n"
+        fi
+        printf "${NC}\n"
+        generate_html_report
 }
 
-main "$@"
+main() {
+        assignPorts "${HOST}"
+        header
+        case "${TYPE}" in
+        [Pp]ort) portScan "${HOST}" ;;
+        [Ss]cript)
+                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                scriptScan "${HOST}"
+                ;;
+        [Uu]dp) UDPScan "${HOST}" ;;
+        [Vv]ulns)
+                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                vulnsScan "${HOST}"
+                ;;
+        [Rr]econ)
+                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                [ ! -f "nmap/Script_TCP_${HOST}.nmap" ] && scriptScan "${HOST}"
+                recon "${HOST}"
+                ;;
+        [Aa]ll)
+                portScan "${HOST}"
+                scriptScan "${HOST}"
+                UDPScan "${HOST}"
+                recon "${HOST}"
+                vulnsScan "${HOST}"
+                ;;
+        esac
+        footer
+}
+
+if [ -z "${TYPE}" ] || [ -z "${HOST}" ]; then
+        usage
+fi
+
+if ! expr "${HOST}" : '^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)$' >/dev/null && ! expr "${HOST}" : '^\(\([[:alnum:]-]\{1,63\}\.\)*[[:alpha:]]\{2,6\}\)$' >/dev/null; then
+        printf "${RED}\n"
+        printf "${RED}Invalid IP or URL!\n"
+        usage
+fi
+
+if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll) false ;; esac then
+        mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ || usage
+        main | tee "RSV-Recon_${HOST}_${TYPE}.txt"
+else
+        printf "${RED}\n"
+        printf "${RED}Invalid Type!\n"
+        usage
+fi
