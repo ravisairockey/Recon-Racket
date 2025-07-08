@@ -12,6 +12,19 @@ PURPLE='\033[1;35m'
 NC='\033[0m'
 origIFS="${IFS}"
 
+# --- Global Variables ---
+HOST=""
+TYPE=""
+DNS=""
+OUTPUTDIR=""
+DNSSERVER=""
+DNSSTRING=""
+NMAPPATH=""
+allTCPPorts=""
+udpPorts=""
+osType=""
+nmapType=""
+
 # --- Banner ---
 banner() {
     printf "${PURPLE}
@@ -35,77 +48,12 @@ ${NC}
 ${CYAN}crafted by @RSVamil${NC}\n\n"
 }
 
-# Start timer
-elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
-
-# Parse flags
-while [ $# -gt 0 ]; do
-        key="$1"
-
-        case "${key}" in
-        -H | --host)
-                HOST="$2"
-                shift
-                shift
-                ;;
-        -t | --type)
-                TYPE="$2"
-                shift
-                shift
-                ;;
-        -d | --dns)
-                DNS="$2"
-                shift
-                shift
-                ;;
-        -o | --output)
-                OUTPUTDIR="$2"
-                shift
-                shift
-                ;;
-        *)
-                POSITIONAL="${POSITIONAL} $1"
-                shift
-                ;;
-        esac
-done
-set -- ${POSITIONAL}
-
-# Legacy flags support, if run without -H/-t
-if [ -z "${HOST}" ]; then
-        HOST="$1"
-fi
-
-if [ -z "${TYPE}" ]; then
-        TYPE="$2"
-fi
-
-# Set DNS or default to system DNS
-if [ -n "${DNS}" ]; then
-        DNSSERVER="${DNS}"
-        DNSSTRING="--dns-server=${DNSSERVER}"
-else
-        DNSSERVER="$(grep 'nameserver' /etc/resolv.conf | grep -v '#' | head -n 1 | awk {'print $NF'})"
-        DNSSTRING="--system-dns"
-fi
-
-# Set output dir or default to host-based dir
-if [ -z "${OUTPUTDIR}" ]; then
-        OUTPUTDIR="${HOST}"
-fi
-
-# Set path to nmap binary or default to nmap in $PATH
-if [ -z "${NMAPPATH}" ] && type nmap >/dev/null 2>&1; then
-        NMAPPATH="$(type nmap | awk {'print $NF'})"
-else
-        printf "${RED}\nNmap is not installed and -s is not used. Eject! Eject! Eject!${NC}\n\n" && REMOTE=true
-fi
-
-# Print usage menu and exit. Used when issues are encountered
+# --- Helper Functions ---
 usage() {
+        banner
         echo
         printf "${GREEN}Usage:${NC} ${RED}$(basename $0) -H/--host ${NC}<TARGET-IP>${RED} -t/--type ${NC}<TYPE>${RED}\n"
-        printf "${YELLOW}Optional: [-d/--dns ${NC}<DNS SERVER>${YELLOW}] [-o/--output ${NC}<OUTPUT DIRECTORY>${YELLOW}]${NC}\n\n"
+        printf "${YELLOW}If no flags are given, the script will start in interactive menu mode.${NC}\n\n"
         printf "${CYAN}Scan Types:\n"
         printf "${CYAN}\tPort    : ${NC}Shows all open ports ${YELLOW}\n"
         printf "${CYAN}\tScript  : ${NC}Runs a script scan on found ports ${YELLOW}\n"
@@ -118,7 +66,6 @@ usage() {
         exit 1
 }
 
-# Print initial header and set initial variables before scans start
 header() {
         banner
         echo
@@ -194,6 +141,7 @@ checkOS() {
         esac
 }
 
+# --- Scanning Functions ---
 portScan() {
         echo
         printf "${GREEN}---------------------Starting Port Scan-----------------------\n"
@@ -365,6 +313,7 @@ runRecon() {
         echo
 }
 
+# --- Reporting ---
 generate_html_report() {
     HTML_REPORT="report.html"
     echo -e "\n${GREEN}--- Generating HTML Report ---${NC}"
@@ -435,51 +384,142 @@ footer() {
         generate_html_report
 }
 
-main() {
-        assignPorts "${HOST}"
-        header
-        case "${TYPE}" in
-        [Pp]ort) portScan "${HOST}" ;;
-        [Ss]cript)
-                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
-                scriptScan "${HOST}"
-                ;;
-        [Uu]dp) UDPScan "${HOST}" ;;
-        [Vv]ulns)
-                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
-                vulnsScan "${HOST}"
-                ;;
-        [Rr]econ)
-                [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
-                [ ! -f "nmap/Script_TCP_${HOST}.nmap" ] && scriptScan "${HOST}"
-                recon "${HOST}"
-                ;;
-        [Aa]ll)
-                portScan "${HOST}"
-                scriptScan "${HOST}"
-                UDPScan "${HOST}"
-                recon "${HOST}"
-                vulnsScan "${HOST}"
-                ;;
-        esac
-        footer
+# --- Interactive Menu Functions ---
+network_discovery() {
+    echo -e "${GREEN}[+] Discovering hosts with arp-scan...${NC}"
+    sudo arp-scan -l | tee "arp_scan.log"
+    mapfile -t DISCOVERED_IPS < <(grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' "arp_scan.log" | sort -u)
+    rm "arp_scan.log"
+    
+    if [ ${#DISCOVERED_IPS[@]} -eq 0 ]; then
+        echo -e "${RED}[!] No hosts found. Exiting.${NC}"
+        exit 1
+    fi
+
+    echo -e "\n${YELLOW}[+] Discovered Targets:${NC}"
+    for i in "${!DISCOVERED_IPS[@]}"; do echo "$((i+1)). ${DISCOVERED_IPS[$i]}"; done
+    
+    read -p "Select target (number) or enter custom IP: " target_choice
+    if [[ "$target_choice" =~ ^[0-9]+$ ]] && [ "$target_choice" -le "${#DISCOVERED_IPS[@]}" ]; then
+        HOST="${DISCOVERED_IPS[$((target_choice-1))]}"
+    else
+        HOST="$target_choice"
+    fi
 }
 
-if [ -z "${TYPE}" ] || [ -z "${HOST}" ]; then
-        usage
-fi
+main_menu() {
+    network_discovery
+    echo -e "\n${CYAN}Select Scan Type for target ${HOST}:${NC}"
+    printf "${CYAN}\t1. Port\n"
+    printf "${CYAN}\t2. Script\n"
+    printf "${CYAN}\t3. UDP\n"
+    printf "${CYAN}\t4. Vulns\n"
+    printf "${CYAN}\t5. Recon\n"
+    printf "${CYAN}\t6. All (Hail Mary)\n"
+    printf "${CYAN}\t7. Exit\n${NC}"
+    read -p "Select an option [6]: " scan_choice
 
-if ! expr "${HOST}" : '^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)$' >/dev/null && ! expr "${HOST}" : '^\(\([[:alnum:]-]\{1,63\}\.\)*[[:alpha:]]\{2,6\}\)$' >/dev/null; then
-        printf "${RED}\n"
-        printf "${RED}Invalid IP or URL!\n"
-        usage
-fi
+    case $scan_choice in
+        1) TYPE="Port" ;;
+        2) TYPE="Script" ;;
+        3) TYPE="UDP" ;;
+        4) TYPE="Vulns" ;;
+        5) TYPE="Recon" ;;
+        6|'') TYPE="All" ;;
+        7) exit 0 ;;
+        *) echo -e "${RED}Invalid option. Exiting.${NC}"; exit 1 ;;
+    esac
+}
 
-if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll) false ;; esac then
-        mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ || usage
-        main | tee "RSV-Recon_${HOST}_${TYPE}.txt"
+# --- Main Execution Logic ---
+run_scans() {
+        # Set path to nmap binary or default to nmap in $PATH
+        if [ -z "${NMAPPATH}" ] && type nmap >/dev/null 2>&1; then
+                NMAPPATH="$(type nmap | awk {'print $NF'})"
+        else
+                printf "${RED}\nNmap is not installed. Eject! Eject! Eject!${NC}\n\n" && exit 1
+        fi
+
+        # Set DNS or default to system DNS
+        if [ -n "${DNS}" ]; then
+                DNSSERVER="${DNS}"
+                DNSSTRING="--dns-server=${DNSSERVER}"
+        else
+                DNSSERVER="$(grep 'nameserver' /etc/resolv.conf | grep -v '#' | head -n 1 | awk {'print $NF'})"
+                DNSSTRING="--system-dns"
+        fi
+
+        # Set output dir or default to host-based dir
+        if [ -z "${OUTPUTDIR}" ]; then
+                OUTPUTDIR="${HOST}"
+        fi
+
+        if ! expr "${HOST}" : '^\([0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\)$' >/dev/null && ! expr "${HOST}" : '^\(\([[:alnum:]-]\{1,63\}\.\)*[[:alpha:]]\{2,6\}\)$' >/dev/null; then
+                printf "${RED}\n"
+                printf "${RED}Invalid IP or URL!\n"
+                usage
+        fi
+
+        if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll) false ;; esac then
+                mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ || usage
+                
+                elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
+                assignPorts "${HOST}"
+                header
+                case "${TYPE}" in
+                [Pp]ort) portScan "${HOST}" ;;
+                [Ss]cript)
+                        [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                        scriptScan "${HOST}"
+                        ;;
+                [Uu]dp) UDPScan "${HOST}" ;;
+                [Vv]ulns)
+                        [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                        vulnsScan "${HOST}"
+                        ;;
+                [Rr]econ)
+                        [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
+                        [ ! -f "nmap/Script_TCP_${HOST}.nmap" ] && scriptScan "${HOST}"
+                        recon "${HOST}"
+                        ;;
+                [Aa]ll)
+                        portScan "${HOST}"
+                        scriptScan "${HOST}"
+                        UDPScan "${HOST}"
+                        recon "${HOST}"
+                        vulnsScan "${HOST}"
+                        ;;
+                esac
+                footer
+        else
+                printf "${RED}\n"
+                printf "${RED}Invalid Type!\n"
+                usage
+        fi
+}
+
+
+# --- Entry Point ---
+if [ $# -eq 0 ]; then
+    # Interactive Mode
+    banner
+    main_menu
+    run_scans
 else
-        printf "${RED}\n"
-        printf "${RED}Invalid Type!\n"
+    # Flag Mode
+    while [ $# -gt 0 ]; do
+        key="$1"
+        case "${key}" in
+        -H | --host) HOST="$2"; shift; shift;;
+        -t | --type) TYPE="$2"; shift; shift;;
+        -d | --dns) DNS="$2"; shift; shift;;
+        -o | --output) OUTPUTDIR="$2"; shift; shift;;
+        *) POSITIONAL="${POSITIONAL} $1"; shift;;
+        esac
+    done
+    set -- ${POSITIONAL}
+    if [ -z "${HOST}" ] || [ -z "${TYPE}" ]; then
         usage
+    fi
+    run_scans
 fi
