@@ -23,6 +23,7 @@ allTCPPorts=""
 udpPorts=""
 osType=""
 nmapType=""
+INTERACTIVE_MODE=false
 
 # --- Banner ---
 banner() {
@@ -66,10 +67,7 @@ usage() {
 }
 
 header() {
-        # No need to print banner again if in interactive mode
-        if [ "$INTERACTIVE_MODE" = true ] ; then
-            : # Do nothing
-        else
+        if [ "$INTERACTIVE_MODE" = false ] ; then
             banner
         fi
         echo
