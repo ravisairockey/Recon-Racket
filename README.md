@@ -1,19 +1,82 @@
-# RSV-Recon
+# 🛡️ Reconamil.sh
+> Automated recon and scanning framework for bug bounty, pentesting & red teaming.
 
-This is a comprehensive, interactive reconnaissance script designed for penetration testers. It is based on the excellent `enumify` script and has been enhanced with additional features, a more user-friendly interface, and detailed HTML reporting.
+![bash](https://img.shields.io/badge/Shell-Bash-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
+![Maintained](https://img.shields.io/badge/Maintained%3F-yes-purple?style=for-the-badge)
+[![CI](https://github.com/ravisairockey/Recon-Racket/actions/workflows/ci.yml/badge.svg)](https://github.com/ravisairockey/Recon-Racket/actions/workflows/ci.yml)
 
-## Features
+---
 
-*   **Interactive Menu**: An easy-to-use menu for discovering hosts and selecting scan types.
-*   **Flag-based Operation**: Can also be run with command-line flags for automation and scripting.
-*   **Modular Scans**: Choose from a variety of scan types, including Port, Script, UDP, Vulnerability, and Fuzzing scans.
-*   **Kali-Optimized**: Uses `rustscan` for fast port scanning if available, and checks for common Kali toolsets like `seclists`.
-*   **Recon Recommendations**: Intelligently suggests and runs further enumeration commands based on discovered services.
-*   **Comprehensive HTML Reporting**: Generates a detailed, dark-mode HTML report at the end of every scan, consolidating all findings.
+## 🚀 What is Reconamil.sh?
+**Reconamil.sh** is a modular, automated shell script built for recon and scanning:
 
-## Installation
+- ✅ Subdomain enumeration (subfinder, amass)
+- ✅ Port & service discovery (nmap)
+- ✅ Vulnerability scanning (nikto, wpscan, nuclei)
+- ✅ SMB scanning (SMBMap)
+- ✅ Network discovery (netdiscover)
+- ✅ Directory fuzzing (ffuf, gobuster, feroxbuster)
+- ✅ FTP enumeration (nmap --script ftp*)
+- ✅ HTML report & log export
+- ✅ Interactive CLI menu for repeated scans
 
-To install RSV-Recon, simply clone the repository and run the installation script with `sudo`.
+Crafted and maintained by **@AmilRSV**.
+
+---
+
+## 🔍 Workflow diagram
+
+```mermaid
+graph TD
+    A[Start] --> B{Target Provided?}
+    B -- Yes --> C[Show Banner]
+    C --> D{Recon Mode?}
+    D -- Yes --> E[Run subfinder & amass]
+    E --> F[Run nmap scan]
+    D -- No --> F
+    F --> G[Run nikto, wpscan, nuclei]
+    G --> H[Run SMBMap & netdiscover]
+    H --> I[Run ffuf, gobuster, feroxbuster, FTP enum]
+    I --> J[Generate HTML report]
+    J --> K[Show menu]
+    K -->|1| L[View scan log]
+    K -->|2| M[View HTML report]
+    K -->|3| N[Run again]
+    K -->|0| O[Exit]
+```
+
+---
+
+## ✨ Features
+
+- Subdomain & recon tools: subfinder, amass
+- Fast port & service scan: nmap
+- Vulnerability scanning: nikto, wpscan, nuclei
+- SMB enumeration: SMBMap
+- Network discovery: netdiscover
+- Directory brute-forcing: ffuf, gobuster, feroxbuster
+- FTP enumeration: nmap --script ftp*
+- Clean HTML report export
+- Timestamped logs in `logs/` folder
+- Interactive CLI menu
+- Checks & prompts to install missing tools automatically
+
+---
+
+## 🧰 Installation & Setup
+
+⚠️ **Requires:**
+
+- `nmap`
+- `subfinder`
+- `amass`
+- `nikto`
+- `wpscan`
+- `nuclei`
+- `smbmap`
+- `netdiscover`
+- `ffuf`, `gobuster`, `feroxbuster`
 
 ```bash
 git clone https://github.com/ravisairockey/Recon-Racket.git
@@ -21,33 +84,109 @@ cd Recon-Racket
 sudo bash install.sh
 ```
 
-The installation script will:
-1.  Check for and install all necessary dependencies.
-2.  Set the correct permissions for the main script.
-3.  Create a symbolic link to `/usr/local/bin/`, allowing you to run `reconamil.sh` from any directory.
+## Installation
 
-## Usage
+Get up and running with a single command. This will clone the repository, install all necessary dependencies, and create a symbolic link so you can run the script from anywhere.
 
-**Interactive Mode (Recommended):**
-
-Simply run the script without any arguments:
 ```bash
-reconamil.sh
-```
-You will be guided through host discovery and scan type selection.
-
-**Flag-based Mode:**
-
-You can also run the script with flags for faster execution:
-```bash
-reconamil.sh -H <TARGET-IP> -t <TYPE>
+git clone https://github.com/ravisairockey/Recon-Racket.git
+cd Recon-Racket
+sudo bash install.sh
 ```
 
-**Scan Types:**
-*   `Port`: Shows all open ports.
-*   `Script`: Runs a script scan on found ports.
-*   `UDP`: Runs a UDP scan.
-*   `Vulns`: Runs CVE and vulnerability scans.
-*   `Recon`: Suggests and runs further recon commands.
-*   `Fuzz`: Runs a `ffuf` scan on discovered web servers.
-*   `All`: Runs all available scans.
+---
+
+## 📦 Usage
+
+```bash
+./Reconamil.sh -t example.com [-r] [-p ports]
+```
+
+| Option       | Description                                        |
+|-------------:|---------------------------------------------------:|
+| `-t target`  | Specify target domain or IP (**required**)        |
+| `-r`         | Enable recon mode (subfinder, amass)              |
+| `-p ports`   | Ports to scan (default: `top-ports 1000`)        |
+| `-h`         | Show help                                         |
+
+---
+
+## 🧪 Example
+
+```bash
+./Reconamil.sh -t example.com -r -p "1-1000"
+```
+
+Expected:
+- Runs subfinder & amass
+- nmap scan on ports 1–1000
+- nikto, wpscan, nuclei vulnerability checks
+- SMB scan & network discovery
+- Directory fuzzing & FTP enum
+- Saves logs:
+  - `logs/scan_TIMESTAMP.txt`
+  - `logs/recon_TIMESTAMP.txt`
+  - `logs/report_TIMESTAMP.html`
+
+---
+
+## 📊 HTML report preview
+
+Includes:
+- Target info
+- Scan results & recon output
+- Vulnerability findings
+- SMB & FTP checks
+- Directory fuzz results
+
+*(Screenshot / template coming soon!)*
+
+---
+
+## 🛠️ Extending
+
+Add even more tools easily:
+- `httpx` for HTTP probing
+- `Slack / Discord` notifications
+- Automatic upload to dashboards
+
+---
+
+## 📂 Project structure
+
+```plaintext
+Recon-Racket/
+├── Reconamil.sh
+├── install.sh
+├── logs/
+├── docs/
+└── README.md
+```
+
+---
+
+## WordList > Pls update to ur use
+-w /usr/share/dirbuster/wordlists/director-list-2.3-medium.txt
+
+## ⚡ Contributing
+
+Pull requests welcome!
+
+**Tips:**
+- Keep functions modular
+- Use color codes for clarity
+- Always log into `logs/`
+
+---
+
+## 📜 License
+
+MIT License
+
+---
+
+## ✒️ Author
+
+Made with ❤️ by **@AmilRSV**
+
+> ⚔️ “Automation is the future of recon.”
