@@ -142,10 +142,23 @@ checkOS() {
 }
 
 # --- Scanning Functions ---
+print_header() {
+    local title=" $1 "
+    local width=$(tput cols)
+    # Ensure width is not zero
+    if [ -z "$width" ] || [ "$width" -lt 20 ]; then
+        width=80
+    fi
+    local padding_total=$((width - ${#title}))
+    local padding_left=$((padding_total / 2))
+    local padding_right=$((padding_total - padding_left))
+    printf "\n${PURPLE}%*s" $padding_left '' | tr ' ' '─'
+    printf "${CYAN}${title}"
+    printf "%*s${NC}\n" $padding_right '' | tr ' ' '─'
+}
+
 portScan() {
-        echo
-        printf "${GREEN}---------------------Starting Port Scan-----------------------\n"
-        printf "${NC}\n"
+        print_header "Starting Port Scan"
         
         if command -v rustscan &> /dev/null; then
             printf "${YELLOW}[*] RustScan Launched${NC}\n"
@@ -164,8 +177,7 @@ portScan() {
 }
 
 scriptScan() {
-        printf "${YELLOW}[*] Script Scan launched on open ports\n"
-        printf "${NC}\n"
+        print_header "Starting Script & Version Scan"
         ports="${allTCPPorts}"
         if [ -z "${ports}" ]; then
                 printf "${YELLOW}No ports in port scan.. Skipping!\n"
@@ -176,8 +188,7 @@ scriptScan() {
 }
 
 UDPScan() {
-        printf "${YELLOW}[*] UDP port scan launched\n"
-        printf "${NC}\n"
+        print_header "Starting UDP Scan"
         if [ "${USER}" != 'root' ]; then
                 echo "${RED}[!] ALERT${NC} UDP scan needs to be run as root."
                 sudo -v
@@ -194,8 +205,7 @@ UDPScan() {
 }
 
 vulnsScan() {
-        printf "${YELLOW}[!] Vulnerability Scan\n"
-        printf "${NC}\n"
+        print_header "Starting Vulnerability Scan"
         ports="${allTCPPorts}"
         if [ ! -f /usr/share/nmap/scripts/vulners.nse ]; then
                 printf "${RED}Please install 'vulners.nse' nmap script and rerun.\n"
@@ -212,6 +222,7 @@ vulnsScan() {
 }
 
 recon() {
+        print_header "Recon Recommendations"
         IFS="
 "
         reconRecommend "${HOST}" | tee "nmap/Recon_${HOST}.nmap"
@@ -443,27 +454,33 @@ main_menu() {
 
 # --- Main Execution Logic ---
 run_fuzz_scan() {
-    printf "${GREEN}--- Starting Fuzz Scan ---${NC}\n"
-    if [ -z "${allTCPPorts}" ]; then
-        printf "${YELLOW}[!] No port scan data found, running a quick port scan first.${NC}\n"
+    print_header "Fuzz Scan"
+    
+    # Run a full port and script scan to identify all services
+    if [ ! -f "nmap/Script_TCP_${HOST}.nmap" ]; then
         portScan "${HOST}"
+        scriptScan "${HOST}"
     fi
 
-    if [ -f "nmap/Script_TCP_${HOST}.nmap" ]; then
-        file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
+    # Check if the script scan file exists
+    if [ ! -f "nmap/Script_TCP_${HOST}.nmap" ]; then
+        printf "${RED}[!] Script scan file not found. Cannot determine web servers to fuzz.${NC}\n"
+        return
     fi
+
+    local file
+    file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
 
     if echo "${file}" | grep -i -q http; then
-        printf "${NC}\n"
-        printf "${YELLOW}> Fuzzing Web Servers:\n"
-        printf "${NC}\n"
+        printf "\n${YELLOW}> Fuzzing discovered Web Servers:${NC}\n"
         for line in ${file}; do
                 if echo "${line}" | grep -i -q http; then
                         port="$(echo "${line}" | cut -d "/" -f 1)"
                         if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
+                        
+                        printf "\n${BLUE}[*] Fuzzing ${urlType}${HOST}:${port}${NC}\n"
                         if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-                            echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
-                            eval "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                            ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" | tee "recon/ffuf_${HOST}_${port}.txt"
                         else
                             printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
                         fi
