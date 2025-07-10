@@ -259,7 +259,6 @@ reconRecommend() {
             return
         fi
 
-        # Use while read loop for robust line-by-line processing
         cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq | while read -r line; do
             if echo "${line}" | grep -q "ftp"; then
                     local ftpPort
@@ -279,7 +278,7 @@ reconRecommend() {
                     printf "${NC}\n"
                     echo "nikto -host \"${urlType}${HOST}:${port}\""
                     if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-                        echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\""
+                        echo "ffuf -noninteractive -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\""
                     else
                         printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
                     fi
@@ -309,19 +308,19 @@ runRecon() {
         grep "${HOST}" "$recon_file" | while read -r line; do
             local currentScan
             currentScan="$(echo "${line}" | cut -d ' ' -f 1)"
+            local port
+            port=$(echo "$line" | grep -oP '(?<=:)\d+' || echo 'service')
             local fileName
-            fileName="${currentScan}_${HOST}_$(echo "$line" | grep -oP '(?<=:)\d+' || echo 'default').txt"
+            fileName="${currentScan}_${HOST}_${port}.txt"
             
             printf "${NC}\n"
-            printf "${YELLOW}[+] Starting ${currentScan} session\n"
+            printf "${YELLOW}[+] Starting ${currentScan} on port ${port}\n"
             printf "${NC}\n"
             
-            # Execute command, strip ANSI codes, and save to file
             local output
             output=$(eval "${line}" 2>&1)
-            echo "${output}" | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' > "recon/${fileName}"
+            echo "${output}" > "recon/${fileName}"
             
-            # Also print clean output to console
             cat "recon/${fileName}"
 
             printf "${NC}\n"
@@ -338,6 +337,7 @@ generate_html_report() {
     local current_dir
     current_dir=$(pwd)
 
+    # Start of HTML
     cat > "$HTML_REPORT" <<EOF
 <!DOCTYPE html>
 <html lang="en">
@@ -360,21 +360,35 @@ generate_html_report() {
         <p><strong>Target:</strong> $HOST</p>
         <p><strong>Scan Date:</strong> $(date)</p>
     </div>
-    <div class="section"><h2>Initial Port Scan</h2><pre>$(cat "${current_dir}/nmap/Port_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Full TCP Scan</h2><pre>$(cat "${current_dir}/nmap/full_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Script Scan</h2><pre>$(cat "${current_dir}/nmap/Script_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>UDP Scan</h2><pre>$(cat "${current_dir}/nmap/UDP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>CVEs Scan</h2><pre>$(cat "${current_dir}/nmap/CVEs_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Vulns Scan</h2><pre>$(cat "${current_dir}/nmap/Vulns_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Recon Results</h2>
-        <h3>Nikto</h3><pre>$(cat "${current_dir}/recon/nikto"*.txt 2>/dev/null)</pre>
-        <h3>FFUF</h3><pre>$(cat "${current_dir}/recon/ffuf"*.txt 2>/dev/null)</pre>
-        <h3>Hydra</h3><pre>$(cat "${current_dir}/recon/hydra"*.txt 2>/dev/null)</pre>
-        <h3>SMBMap</h3><pre>$(cat "${current_dir}/recon/smbmap"*.txt 2>/dev/null)</pre>
-        <h3>SMBClient</h3><pre>$(cat "${current_dir}/recon/smbclient"*.txt 2>/dev/null)</pre>
-        <h3>Enum4Linux</h3><pre>$(cat "${current_dir}/recon/enum4linux"*.txt 2>/dev/null)</pre>
-    </div>
-    <div class="section"><h2>Full Console Log</h2><pre>$(cat "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt" 2>/dev/null)</pre></div>
+EOF
+
+    # Add Nmap scans
+    for scan_file in "nmap/Port_${HOST}.nmap" "nmap/full_TCP_${HOST}.nmap" "nmap/Script_TCP_${HOST}.nmap" "nmap/UDP_${HOST}.nmap" "nmap/CVEs_${HOST}.nmap" "nmap/Vulns_${HOST}.nmap"; do
+        if [ -f "$scan_file" ]; then
+            scan_name=$(basename "$scan_file" ".nmap" | sed 's/_/ /g')
+            echo "<div class=\"section\"><h2>${scan_name}</h2><pre>$(cat "$scan_file")</pre></div>" >> "$HTML_REPORT"
+        fi
+    done
+
+    # Add Recon results
+    if [ -d "recon" ] && [ "$(ls -A recon)" ]; then
+        echo "<div class=\"section\"><h2>Recon Results</h2>" >> "$HTML_REPORT"
+        for recon_file in recon/*; do
+            if [ -f "$recon_file" ]; then
+                recon_name=$(basename "$recon_file" ".txt")
+                echo "<h3>${recon_name}</h3><pre>$(cat "$recon_file")</pre>" >> "$HTML_REPORT"
+            fi
+        done
+        echo "</div>" >> "$HTML_REPORT"
+    fi
+
+    # Add Full Console Log
+    if [ -f "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt" ]; then
+        echo "<div class=\"section\"><h2>Full Console Log</h2><pre>$(cat "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt")</pre></div>" >> "$HTML_REPORT"
+    fi
+
+    # End of HTML
+    cat >> "$HTML_REPORT" <<EOF
     <footer><p>Report generated by RSVamil | <a href="https://github.com/ravisairockey" target="_blank">https://github.com/ravisairockey</a></p></footer>
 </body>
 </html>
@@ -485,7 +499,8 @@ run_fuzz_scan() {
         printf "\n${BLUE}[*] Fuzzing ${urlType}${HOST}:${port}${NC}\n"
         if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
             fuzz_output_file="recon/ffuf_${HOST}_${port}.txt"
-            ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "${fuzz_output_file}"
+            ffuf -noninteractive -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" > "${fuzz_output_file}"
+            cat "${fuzz_output_file}"
         else
             printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
         fi
@@ -520,6 +535,7 @@ run_scans() {
         if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll | [Ff]uzz) false ;; esac then
                 mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ recon/ || usage
                 
+                (
                 elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
                 assignPorts "${HOST}"
                 header
@@ -551,6 +567,7 @@ run_scans() {
                         ;;
                 esac
                 footer
+                ) | tee "../RSV-Recon_${HOST}_${TYPE}.txt"
         else
                 printf "${RED}\n"
                 printf "${RED}Invalid Type!\n"
