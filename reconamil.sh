@@ -267,7 +267,11 @@ reconRecommend() {
                                 port="$(echo "${line}" | cut -d "/" -f 1)"
                                 if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
                                 echo "nikto -host \"${urlType}${HOST}:${port}\" | tee \"recon/nikto_${HOST}_${port}.txt\""
-                                echo "ffuf -ic -w /usr/share/dirbuster/wordlists/director-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                                if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
+                                    echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                                else
+                                    printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
+                                fi
                         fi
                 done
         fi
@@ -409,15 +413,20 @@ network_discovery() {
 
 main_menu() {
     network_discovery
-    echo -e "\n${CYAN}Select Scan Type for target ${HOST}:${NC}"
-    printf "${CYAN}\t1. Port\n"
-    printf "${CYAN}\t2. Script\n"
-    printf "${CYAN}\t3. UDP\n"
-    printf "${CYAN}\t4. Vulns\n"
-    printf "${CYAN}\t5. Recon\n"
-    printf "${CYAN}\t6. All (Hail Mary)\n"
-    printf "${CYAN}\t7. Exit\n${NC}"
-    read -p "Select an option [6]: " scan_choice
+    echo
+    printf "${PURPLE}┌───────────────────────────────────────────┐\n"
+    printf "│${CYAN} Select Scan Type for target ${YELLOW}%-13s ${PURPLE}│\n" "$HOST"
+    printf "├───────────────────────────────────────────┤\n"
+    printf "│${CYAN} 1. Port Scan                          ${PURPLE}│\n"
+    printf "│${CYAN} 2. Script Scan                        ${PURPLE}│\n"
+    printf "│${CYAN} 3. UDP Scan                           ${PURPLE}│\n"
+    printf "│${CYAN} 4. Vulns Scan                         ${PURPLE}│\n"
+    printf "│${CYAN} 5. Recon Actions                      ${PURPLE}│\n"
+    printf "│${CYAN} 6. Fuzz Scan Only (ffuf)              ${PURPLE}│\n"
+    printf "│${CYAN} 7. All (Hail Mary)                    ${PURPLE}│\n"
+    printf "│${CYAN} 8. Exit                               ${PURPLE}│\n"
+    printf "└───────────────────────────────────────────┘\n${NC}"
+    read -p "Select an option [7]: " scan_choice
 
     case $scan_choice in
         1) TYPE="Port" ;;
@@ -425,13 +434,46 @@ main_menu() {
         3) TYPE="UDP" ;;
         4) TYPE="Vulns" ;;
         5) TYPE="Recon" ;;
-        6|'') TYPE="All" ;;
-        7) exit 0 ;;
+        6) TYPE="Fuzz" ;;
+        7|'') TYPE="All" ;;
+        8) exit 0 ;;
         *) echo -e "${RED}Invalid option. Exiting.${NC}"; exit 1 ;;
     esac
 }
 
 # --- Main Execution Logic ---
+run_fuzz_scan() {
+    printf "${GREEN}--- Starting Fuzz Scan ---${NC}\n"
+    if [ -z "${allTCPPorts}" ]; then
+        printf "${YELLOW}[!] No port scan data found, running a quick port scan first.${NC}\n"
+        portScan "${HOST}"
+    fi
+
+    if [ -f "nmap/Script_TCP_${HOST}.nmap" ]; then
+        file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
+    fi
+
+    if echo "${file}" | grep -i -q http; then
+        printf "${NC}\n"
+        printf "${YELLOW}> Fuzzing Web Servers:\n"
+        printf "${NC}\n"
+        for line in ${file}; do
+                if echo "${line}" | grep -i -q http; then
+                        port="$(echo "${line}" | cut -d "/" -f 1)"
+                        if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
+                        if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
+                            echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                            eval "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                        else
+                            printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
+                        fi
+                fi
+        done
+    else
+        printf "${YELLOW}[!] No HTTP services found to fuzz.${NC}\n"
+    fi
+}
+
 run_scans() {
         # Set path to nmap binary or default to nmap in $PATH
         if [ -z "${NMAPPATH}" ] && type nmap >/dev/null 2>&1; then
@@ -460,7 +502,7 @@ run_scans() {
                 usage
         fi
 
-        if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll) false ;; esac then
+        if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll | [Ff]uzz) false ;; esac then
                 mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ || usage
                 
                 elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
@@ -481,6 +523,9 @@ run_scans() {
                         [ ! -f "nmap/full_TCP_${HOST}.nmap" ] && portScan "${HOST}"
                         [ ! -f "nmap/Script_TCP_${HOST}.nmap" ] && scriptScan "${HOST}"
                         recon "${HOST}"
+                        ;;
+                [Ff]uzz)
+                        run_fuzz_scan
                         ;;
                 [Aa]ll)
                         portScan "${HOST}"
