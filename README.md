@@ -155,6 +155,9 @@ Reconamil.sh/
 
 ---
 
+## WordList > Pls update to ur use
+-w /usr/share/dirbuster/wordlists/director-list-2.3-medium.txt
+
 ## ⚡ Contributing
 
 Pull requests welcome!
