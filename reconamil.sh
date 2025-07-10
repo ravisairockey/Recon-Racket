@@ -267,7 +267,7 @@ reconRecommend() {
                                 port="$(echo "${line}" | cut -d "/" -f 1)"
                                 if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
                                 echo "nikto -host \"${urlType}${HOST}:${port}\" | tee \"recon/nikto_${HOST}_${port}.txt\""
-                                echo "ffuf -ic -w /usr/share/wordlists/dirb/common.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                                echo "ffuf -ic -w /usr/share/dirbuster/wordlists/director-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
                         fi
                 done
         fi
