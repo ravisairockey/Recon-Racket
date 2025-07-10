@@ -52,17 +52,11 @@ ${CYAN}crafted by @RSVamil${NC}\n\n"
 usage() {
         banner
         echo
-        printf "${GREEN}Usage:${NC} ${RED}$(basename $0) -H/--host ${NC}<TARGET-IP>${RED} -t/--type ${NC}<TYPE>${RED}\n"
+        printf "${GREEN}Usage:${NC} ${RED}$(basename $0) -H <TARGET-IP> -t <TYPE>${NC}\n"
         printf "${YELLOW}If no flags are given, the script will start in interactive menu mode.${NC}\n\n"
         printf "${CYAN}Scan Types:\n"
-        printf "${CYAN}\tPort    : ${NC}Shows all open ports ${YELLOW}\n"
-        printf "${CYAN}\tScript  : ${NC}Runs a script scan on found ports ${YELLOW}\n"
-        printf "${CYAN}\tUDP     : ${NC}Runs a UDP scan \"requires sudo\" ${YELLOW}\n"
-        printf "${CYAN}\tVulns   : ${NC}Runs CVE scan and nmap Vulns scan on all found ports ${YELLOW}\n"
-        printf "${CYAN}\tRecon   : ${NC}Suggests recon commands, then prompts to automatically run them\n"
         printf "${CYAN}\tAll     : ${NC}Runs all the scans ${YELLOW}\n"
-        printf "${NC}\n"
-        printf "Crafted by ${PURPLE}@RSVamil${NC} \n"
+        printf "${CYAN}\tFuzz    : ${NC}Runs only the FFUF scan on discovered web ports${NC}\n"
         exit 1
 }
 
@@ -222,7 +216,7 @@ vulnsScan() {
 
 recon() {
         print_header "Recon Recommendations"
-        reconRecommend "${HOST}" | tee "nmap/Recon_${HOST}.nmap"
+        reconRecommend "${HOST}" > "nmap/Recon_${HOST}.nmap"
         allRecon="$(grep "${HOST}" "nmap/Recon_${HOST}.nmap" | cut -d " " -f 1 | sort | uniq)"
 
         for tool in ${allRecon}; do
@@ -276,7 +270,7 @@ reconRecommend() {
                     printf "${NC}\n"
                     echo "nikto -host \"${urlType}${HOST}:${port}\""
                     if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-                        echo "ffuf -noninteractive -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\""
+                        echo "ffuf -ic -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" -of json -o recon/ffuf_${HOST}_${port}.json"
                     else
                         printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
                     fi
@@ -315,10 +309,10 @@ runRecon() {
             printf "${YELLOW}[+] Starting ${currentScan} on port ${port}\n"
             printf "${NC}\n"
             
-            local output
-            output=$(eval "${line}" 2>&1)
-            echo "${output}" > "recon/${fileName}"
+            # Execute command and save clean output
+            eval "${line}" > "recon/${fileName}" 2>&1
             
+            # Also print clean output to console
             cat "recon/${fileName}"
 
             printf "${NC}\n"
@@ -348,6 +342,9 @@ generate_html_report() {
         h1, h2, h3 { color: #9d72ff; border-bottom: 1px solid #555; padding-bottom: 5px; }
         .section { background-color: #2b2b2b; padding: 15px; margin: 15px 0; border-left: 4px solid #9d72ff; border-radius: 5px; }
         pre { background-color: #111; padding: 10px; border-radius: 3px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px;}
+        th, td { border: 1px solid #555; padding: 8px; text-align: left; }
+        th { background-color: #444; }
         footer { text-align: center; margin-top: 30px; font-size: 0.8em; color: #888; }
         a { color: #9d72ff; }
     </style>
@@ -371,8 +368,21 @@ EOF
     # Add Recon results
     if [ -d "recon" ] && [ "$(ls -A recon)" ]; then
         echo "<div class=\"section\"><h2>Recon Results</h2>" >> "$HTML_REPORT"
-        for recon_file in recon/*; do
-            if [ -f "$recon_file" ]; then
+        
+        # Process FFUF JSON files
+        for ffuf_file in recon/ffuf*.json; do
+            if [ -f "$ffuf_file" ]; then
+                port=$(echo "$ffuf_file" | grep -oP '(?<=_)\d+(?=\.json)')
+                echo "<h3>FFUF Results for Port ${port}</h3>" >> "$HTML_REPORT"
+                echo "<table><tr><th>URL</th><th>Status</th><th>Length</th></tr>" >> "$HTML_REPORT"
+                jq -r '.results[] | "<tr><td>\(.url)</td><td>\(.status)</td><td>\(.length)</td></tr>"' "$ffuf_file" >> "$HTML_REPORT"
+                echo "</table>" >> "$HTML_REPORT"
+            fi
+        done
+
+        # Process other text-based recon files
+        for recon_file in recon/*.txt; do
+             if [ -f "$recon_file" ]; then
                 recon_name=$(basename "$recon_file" ".txt")
                 echo "<h3>${recon_name}</h3><pre>$(cat "$recon_file")</pre>" >> "$HTML_REPORT"
             fi
@@ -381,8 +391,8 @@ EOF
     fi
 
     # Add Full Console Log
-    if [ -f "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt" ]; then
-        echo "<div class=\"section\"><h2>Full Console Log</h2><pre>$(cat "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt")</pre></div>" >> "$HTML_REPORT"
+    if [ -f "${current_dir}/../RSV-Recon_${HOST}_${TYPE}.txt" ]; then
+        echo "<div class=\"section\"><h2>Full Console Log</h2><pre>$(cat "${current_dir}/../RSV-Recon_${HOST}_${TYPE}.txt")</pre></div>" >> "$HTML_REPORT"
     fi
 
     # End of HTML
@@ -496,9 +506,10 @@ run_fuzz_scan() {
         
         printf "\n${BLUE}[*] Fuzzing ${urlType}${HOST}:${port}${NC}\n"
         if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-            fuzz_output_file="recon/ffuf_${HOST}_${port}.txt"
-            ffuf -noninteractive -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" > "${fuzz_output_file}"
-            cat "${fuzz_output_file}"
+            fuzz_output_file="recon/ffuf_${HOST}_${port}.json"
+            ffuf -ic -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" -o "${fuzz_output_file}" -of json
+            # Print the clean results from the JSON file
+            jq -r '.results[] | "\(.input.FUZZ) [Status: \(.status), Size: \(.length), Words: \(.words), Lines: \(.lines)]"' "${fuzz_output_file}"
         else
             printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
         fi
@@ -600,3 +611,48 @@ else
     fi
     run_scans
 fi
+</final_file_content>
+
+IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.
+
+<environment_details>
+# VSCode Visible Files
+RSV-RECON/reconamil.sh
+
+# VSCode Open Tabs
+Recon-Racket/README.md
+RSV-RECON/reconamil.sh
+video-bookmarker/video-bookmarker.desktop
+
+# Current Time
+7/10/2025, 1:25:06 PM (Asia/Calcutta, UTC+5.5:00)
+
+# Context Window Usage
+615,164 / 1,048.576K tokens used (59%)
+
+# Current Mode
+ACT MODE
+</environment_details>
+</final_file_content>
+
+IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.
+
+<environment_details>
+# VSCode Visible Files
+RSV-RECON/reconamil.sh
+
+# VSCode Open Tabs
+Recon-Racket/README.md
+RSV-RECON/reconamil.sh
+video-bookmarker/video-bookmarker.desktop
+
+# Current Time
+7/10/2025, 1:25:40 PM (Asia/Calcutta, UTC+5.5:00)
+
+# Context Window Usage
+686,172 / 1,048.576K tokens used (65%)
+
+# Current Mode
+ACT MODE
+</environment_details>
+
