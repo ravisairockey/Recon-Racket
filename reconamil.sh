@@ -67,7 +67,10 @@ usage() {
 }
 
 header() {
-        banner
+        # No need to print banner again if in interactive mode
+        if [ $# -eq 0 ]; then
+            banner
+        fi
         echo
         if expr "${TYPE}" : '^\([Aa]ll\)$' >/dev/null; then
                 printf "${GREEN}Hail Mary on ${NC}${PURPLE}${HOST}${NC}"
@@ -141,10 +144,10 @@ checkOS() {
         esac
 }
 
-# --- Scanning Functions ---
 print_header() {
     local title=" $1 "
-    local width=$(tput cols)
+    local width
+    width=$(tput cols)
     # Ensure width is not zero
     if [ -z "$width" ] || [ "$width" -lt 20 ]; then
         width=80
@@ -157,6 +160,7 @@ print_header() {
     printf "%*s${NC}\n" $padding_right '' | tr ' ' '─'
 }
 
+# --- Scanning Functions ---
 portScan() {
         print_header "Starting Port Scan"
         
@@ -223,6 +227,7 @@ vulnsScan() {
 
 recon() {
         print_header "Recon Recommendations"
+        local OLD_IFS=$IFS
         IFS="
 "
         reconRecommend "${HOST}" | tee "nmap/Recon_${HOST}.nmap"
@@ -249,7 +254,7 @@ recon() {
                         runRecon "${HOST}" "All"
                 fi
         fi
-        IFS="${origIFS}"
+        IFS=$OLD_IFS
 }
 
 reconRecommend() {
@@ -261,7 +266,6 @@ reconRecommend() {
             return
         fi
 
-        # Temporarily change IFS to newline for the loop
         local OLD_IFS=$IFS
         IFS='
 '
@@ -277,7 +281,7 @@ reconRecommend() {
                 printf "${NC}\n"
                 printf "${YELLOW}> FTP bruteforcing with default creds:\n"
                 printf "${NC}\n"
-                echo "hydra -s $ftpPort -C /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt -u -f \"${HOST}\" ftp | tee \"recon/ftpBruteforce_${HOST}.txt\""
+                echo "hydra -s $ftpPort -C /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt -u -f \"${HOST}\" ftp"
         fi
 
         # HTTP
@@ -291,9 +295,9 @@ reconRecommend() {
                                 port="$(echo "${line}" | cut -d "/" -f 1)"
                                 local urlType
                                 if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
-                                echo "nikto -host \"${urlType}${HOST}:${port}\" | tee \"recon/nikto_${HOST}_${port}.txt\""
+                                echo "nikto -host \"${urlType}${HOST}:${port}\""
                                 if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-                                    echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\" | tee \"recon/ffuf_${HOST}_${port}.txt\""
+                                    echo "ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u \"${urlType}${HOST}:${port}/FUZZ\""
                                 else
                                     printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
                                 fi
@@ -306,20 +310,17 @@ reconRecommend() {
                 printf "${NC}\n"
                 printf "${YELLOW}> SMB Recon:\n"
                 printf "${NC}\n"
-                echo "smbmap -H \"${HOST}\" | tee \"recon/smbmap_${HOST}.txt\""
-                echo "smbclient -L \"//${HOST}/\" -U \"guest\"% | tee \"recon/smbclient_${HOST}.txt\""
-                echo "enum4linux -a \"${HOST}\" | tee \"recon/enum4linux_${HOST}.txt\""
+                echo "smbmap -H \"${HOST}\""
+                echo "smbclient -L \"//${HOST}/\" -U \"guest\"%"
+                echo "enum4linux -a \"${HOST}\""
         fi
         
-        # Restore IFS
         IFS=$OLD_IFS
         echo
 }
 
 runRecon() {
-        echo
-        printf "${GREEN}[*] Running Recon on the target\n"
-        printf "${NC}\n"
+        print_header "Running Recon Commands"
         local OLD_IFS=$IFS
         IFS="
 "
@@ -331,18 +332,17 @@ runRecon() {
         fi
         for line in ${reconCommands}; do
                 currentScan="$(echo "${line}" | cut -d ' ' -f 1)"
-                fileName="$(echo "${line}" | awk -F "recon/" '{print $2}')"
-                if [ -n "${fileName}" ] && [ ! -f recon/"${fileName}" ]; then
-                        printf "${NC}\n"
-                        printf "${YELLOW}[+] Starting ${currentScan} session\n"
-                        printf "${NC}\n"
-                        # Pipe eval through sed to strip ANSI codes before teeing
-                        eval "${line}" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee recon/"${fileName}"
-                        printf "${NC}\n"
-                        printf "${YELLOW}[-] Finished ${currentScan} session\n"
-                        printf "${NC}\n"
-                        printf "${YELLOW}--------------------------------------\n"
-                fi
+                fileName="${currentScan}_${HOST}.txt"
+                
+                printf "${NC}\n"
+                printf "${YELLOW}[+] Starting ${currentScan} session\n"
+                printf "${NC}\n"
+                
+                # Pipe eval through sed to strip ANSI codes before teeing
+                eval "${line}" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "recon/${fileName}"
+                
+                printf "${NC}\n"
+                printf "${YELLOW}[-] Finished ${currentScan} session\n"
         done
         IFS=$OLD_IFS
         echo
@@ -353,6 +353,10 @@ generate_html_report() {
     HTML_REPORT="report.html"
     echo -e "\n${GREEN}--- Generating HTML Report ---${NC}"
     
+    # Use absolute paths by getting the current directory
+    local current_dir
+    current_dir=$(pwd)
+
     cat > "$HTML_REPORT" <<EOF
 <!DOCTYPE html>
 <html lang="en">
@@ -375,27 +379,28 @@ generate_html_report() {
         <p><strong>Target:</strong> $HOST</p>
         <p><strong>Scan Date:</strong> $(date)</p>
     </div>
-    <div class="section"><h2>Initial Port Scan</h2><pre>$(cat "nmap/Port_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Full TCP Scan</h2><pre>$(cat "nmap/full_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Script Scan</h2><pre>$(cat "nmap/Script_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>UDP Scan</h2><pre>$(cat "nmap/UDP_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>CVEs Scan</h2><pre>$(cat "nmap/CVEs_${HOST}.nmap" 2>/dev/null)</pre></div>
-    <div class="section"><h2>Vulns Scan</h2><pre>$(cat "nmap/Vulns_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Initial Port Scan</h2><pre>$(cat "${current_dir}/nmap/Port_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Full TCP Scan</h2><pre>$(cat "${current_dir}/nmap/full_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Script Scan</h2><pre>$(cat "${current_dir}/nmap/Script_TCP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>UDP Scan</h2><pre>$(cat "${current_dir}/nmap/UDP_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>CVEs Scan</h2><pre>$(cat "${current_dir}/nmap/CVEs_${HOST}.nmap" 2>/dev/null)</pre></div>
+    <div class="section"><h2>Vulns Scan</h2><pre>$(cat "${current_dir}/nmap/Vulns_${HOST}.nmap" 2>/dev/null)</pre></div>
     <div class="section"><h2>Recon Results</h2>
-        <h3>Nikto</h3><pre>$(cat recon/nikto* 2>/dev/null)</pre>
-        <h3>FFUF</h3><pre>$(cat recon/ffuf* 2>/dev/null)</pre>
-        <h3>Hydra</h3><pre>$(cat recon/ftpBruteforce* 2>/dev/null)</pre>
-        <h3>SMBMap</h3><pre>$(cat recon/smbmap* 2>/dev/null)</pre>
-        <h3>SMBClient</h3><pre>$(cat recon/smbclient* 2>/dev/null)</pre>
-        <h3>Enum4Linux</h3><pre>$(cat recon/enum4linux* 2>/dev/null)</pre>
+        <h3>Nikto</h3><pre>$(cat "${current_dir}/recon/nikto"*.txt 2>/dev/null)</pre>
+        <h3>FFUF</h3><pre>$(cat "${current_dir}/recon/ffuf"*.txt 2>/dev/null)</pre>
+        <h3>Hydra</h3><pre>$(cat "${current_dir}/recon/hydra"*.txt 2>/dev/null)</pre>
+        <h3>SMBMap</h3><pre>$(cat "${current_dir}/recon/smbmap"*.txt 2>/dev/null)</pre>
+        <h3>SMBClient</h3><pre>$(cat "${current_dir}/recon/smbclient"*.txt 2>/dev/null)</pre>
+        <h3>Enum4Linux</h3><pre>$(cat "${current_dir}/recon/enum4linux"*.txt 2>/dev/null)</pre>
     </div>
+    <div class="section"><h2>Full Console Log</h2><pre>$(cat "${current_dir}/RSV-Recon_${HOST}_${TYPE}.txt" 2>/dev/null)</pre></div>
     <footer><p>Report generated by RSVamil | <a href="https://github.com/ravisairockey" target="_blank">https://github.com/ravisairockey</a></p></footer>
 </body>
 </html>
 EOF
 
-    echo -e "${GREEN}[+] Report generated: $HTML_REPORT${NC}"
-    xdg-open "$HTML_REPORT" 2>/dev/null
+    echo -e "${GREEN}[+] Report generated: ${current_dir}/${HTML_REPORT}${NC}"
+    xdg-open "${current_dir}/${HTML_REPORT}" 2>/dev/null
 }
 
 footer() {
@@ -488,6 +493,9 @@ run_fuzz_scan() {
         return
     fi
 
+    local OLD_IFS=$IFS
+    IFS='
+'
     local file
     file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
 
@@ -500,7 +508,7 @@ run_fuzz_scan() {
                         
                         printf "\n${BLUE}[*] Fuzzing ${urlType}${HOST}:${port}${NC}\n"
                         if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
-                            ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" | tee "recon/ffuf_${HOST}_${port}.txt"
+                            ffuf -w /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt -u "${urlType}${HOST}:${port}/FUZZ" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "recon/ffuf_${HOST}_${port}.txt"
                         else
                             printf "${RED}[!] Wordlist /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt not found. Skipping FFUF scan.${NC}\n"
                         fi
@@ -509,6 +517,7 @@ run_fuzz_scan() {
     else
         printf "${YELLOW}[!] No HTTP services found to fuzz.${NC}\n"
     fi
+    IFS=$OLD_IFS
 }
 
 run_scans() {
@@ -540,11 +549,11 @@ run_scans() {
         fi
 
         if ! case "${TYPE}" in [Nn]etwork | [Pp]ort | [Ss]cript | [Ff]ull | UDP | udp | [Vv]ulns | [Rr]econ | [Aa]ll | [Ff]uzz) false ;; esac then
-                mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ || usage
+                mkdir -p "${OUTPUTDIR}" && cd "${OUTPUTDIR}" && mkdir -p nmap/ recon/ || usage
                 
                 elapsedStart="$(date '+%H:%M:%S' | awk -F: '{print $1 * 3600 + $2 * 60 + $3}')"
                 assignPorts "${HOST}"
-                header
+                header "flag"
                 case "${TYPE}" in
                 [Pp]ort) portScan "${HOST}" ;;
                 [Ss]cript)
@@ -605,3 +614,54 @@ else
     fi
     run_scans
 fi
+</final_file_content>
+
+IMPORTANT: For any future changes to this file, use the final_file_content shown above as your reference. This content reflects the current state of the file, including any auto-formatting (e.g., if you used single quotes but the formatter converted them to double quotes). Always base your SEARCH/REPLACE operations on this final version to ensure accuracy.
+
+<environment_details>
+# VSCode Visible Files
+RSV-RECON/reconamil.sh
+
+# VSCode Open Tabs
+video-bookmarker/videos.js
+video-bookmarker/setup_links.py
+video-bookmarker/index.safe.html
+video-bookmarker/style.safe.css
+video-bookmarker/app.safe.js
+video-bookmarker/style.final.css
+video-bookmarker/index.html
+video-bookmarker/style.css
+video-bookmarker/app.js
+video-bookmarker/server.py
+video-bookmarker/launch.sh
+video-bookmarker/learning-guide.desktop
+video-bookmarker/setup.py
+video-bookmarker/scanner.py
+video-bookmarker/README.md
+Learn-Python/.gitignore
+Learn-Python/main.js
+Learn-Python/preload.js
+Learn-Python/renderer.js
+Learn-Python/index.html
+Learn-Python/style.css
+Learn-Python/package.json
+Learn-Python/assets/banner.svg
+Learn-Python/README.md
+IMAGE TO BINARY/image_converter.html
+RSV-TOOLKIT/gmsa_hash_cracker.py
+RSV-TOOLKIT/rsv-toolkit.sh
+RSV-TOOLKIT/LICENSE
+RSV-TOOLKIT/README.md
+RSV-RECON/reconamil.sh
+IMAGE TO BINARY/README.md
+video-bookmarker/video-bookmarker.desktop
+
+# Current Time
+7/10/2025, 12:24:18 PM (Asia/Calcutta, UTC+5.5:00)
+
+# Context Window Usage
+410,001 / 1,048.576K tokens used (39%)
+
+# Current Mode
+ACT MODE
+</environment_details>
