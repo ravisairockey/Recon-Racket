@@ -256,26 +256,40 @@ reconRecommend() {
         printf "\n\n\n\n"
         printf "${YELLOW}[*] Recon Recommendations\n"
         printf "${NC}\n"
-        IFS="
-"
-        if [ -f "nmap/Script_TCP_${HOST}.nmap" ]; then
-                ports="${allTCPPorts}"
-                file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
+        
+        if [ ! -f "nmap/Script_TCP_${HOST}.nmap" ]; then
+            return
         fi
+
+        # Temporarily change IFS to newline for the loop
+        local OLD_IFS=$IFS
+        IFS='
+'
+        local file
+        file="$(cat "nmap/Script_TCP_${HOST}.nmap" | grep "open" | grep -v "#" | sort | uniq)"
+
+        # FTP
         if echo "${file}" | grep -q "ftp"; then
-                ftpPort="$(echo "${file}" | grep ftp | awk -F'/' '{if (NR <= 1) print $1}')"
+                local ftp_line
+                ftp_line=$(echo "${file}" | grep "ftp" | head -n 1)
+                local ftpPort
+                ftpPort="$(echo "${ftp_line}" | cut -d'/' -f1)"
                 printf "${NC}\n"
                 printf "${YELLOW}> FTP bruteforcing with default creds:\n"
                 printf "${NC}\n"
                 echo "hydra -s $ftpPort -C /usr/share/seclists/Passwords/Default-Credentials/ftp-betterdefaultpasslist.txt -u -f \"${HOST}\" ftp | tee \"recon/ftpBruteforce_${HOST}.txt\""
         fi
+
+        # HTTP
         if echo "${file}" | grep -i -q http; then
                 printf "${NC}\n"
                 printf "${YELLOW}> Web Servers Recon:\n"
                 printf "${NC}\n"
                 for line in ${file}; do
                         if echo "${line}" | grep -i -q http; then
+                                local port
                                 port="$(echo "${line}" | cut -d "/" -f 1)"
+                                local urlType
                                 if echo "${line}" | grep -q ssl/http; then urlType='https://'; else urlType='http://'; fi
                                 echo "nikto -host \"${urlType}${HOST}:${port}\" | tee \"recon/nikto_${HOST}_${port}.txt\""
                                 if [ -f /usr/share/dirbuster/wordlists/directory-list-2.3-medium.txt ]; then
@@ -286,6 +300,8 @@ reconRecommend() {
                         fi
                 done
         fi
+
+        # SMB
         if echo "${file}" | grep -q "445/tcp"; then
                 printf "${NC}\n"
                 printf "${YELLOW}> SMB Recon:\n"
@@ -294,7 +310,9 @@ reconRecommend() {
                 echo "smbclient -L \"//${HOST}/\" -U \"guest\"% | tee \"recon/smbclient_${HOST}.txt\""
                 echo "enum4linux -a \"${HOST}\" | tee \"recon/enum4linux_${HOST}.txt\""
         fi
-        IFS="${origIFS}"
+        
+        # Restore IFS
+        IFS=$OLD_IFS
         echo
 }
 
@@ -302,6 +320,7 @@ runRecon() {
         echo
         printf "${GREEN}[*] Running Recon on the target\n"
         printf "${NC}\n"
+        local OLD_IFS=$IFS
         IFS="
 "
         mkdir -p recon/
@@ -317,14 +336,15 @@ runRecon() {
                         printf "${NC}\n"
                         printf "${YELLOW}[+] Starting ${currentScan} session\n"
                         printf "${NC}\n"
-                        eval "${line}"
+                        # Pipe eval through sed to strip ANSI codes before teeing
+                        eval "${line}" 2>&1 | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee recon/"${fileName}"
                         printf "${NC}\n"
                         printf "${YELLOW}[-] Finished ${currentScan} session\n"
                         printf "${NC}\n"
                         printf "${YELLOW}--------------------------------------\n"
                 fi
         done
-        IFS="${origIFS}"
+        IFS=$OLD_IFS
         echo
 }
 
